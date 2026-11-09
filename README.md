@@ -391,3 +391,5 @@ Cada cambio generado debe revisarse, ajustarse y validarse manualmente. La respo
 ## 📄 Licencia y contexto académico
 
 Proyecto académico desarrollado en el marco de la formación ADSO del SENA. Antes de distribuirlo en producción se deben completar la gestión de secretos, autenticación real, observabilidad segura, política de privacidad, protección de datos y revisión de permisos.
+#   G e s t o r - d e - A p r e n d i c e s  
+ 
