@@ -18,5 +18,6 @@ local.properties
 .idea/.name
 backend/node_modules/
 backend/.env
+backend/uploads/
 *.log
 
