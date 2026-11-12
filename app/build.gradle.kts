@@ -3,7 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.hilt.android)
 }
+
+val apiBaseUrl: String = project.findProperty("API_BASE_URL") as? String ?: "http://192.168.78.114:3000/"
+val apiReleaseBaseUrl: String = project.findProperty("API_RELEASE_BASE_URL") as? String ?: "https://api.reportactma.example.com/"
 
 android {
     namespace = "com.example.labo_android_semana_02"
@@ -22,7 +26,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "BASE_URL", "\"$apiBaseUrl\"")
+        }
         release {
+            buildConfigField("String", "BASE_URL", "\"$apiReleaseBaseUrl\"")
             optimization {
                 enable = false
             }
@@ -34,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     sourceSets {
@@ -54,7 +63,14 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
 
-    // Room
+    // Hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
+    androidTestImplementation(libs.hilt.android.testing)
+    kspAndroidTest(libs.hilt.compiler)
+
+    // Room (Caché offline)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
