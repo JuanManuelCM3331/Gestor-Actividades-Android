@@ -6,7 +6,7 @@ Aplicación Android desarrollada como proyecto integrador del programa de formac
 
 ---
 
-## 📌 Resumen del sistema
+##  Resumen del sistema
 
 ReportaCTMA está compuesto por una aplicación Android de una sola app/módulo (`app`) con tres responsabilidades principales:
 
@@ -60,7 +60,7 @@ La fuente de verdad de la experiencia de lectura es Room. La red se utiliza para
 
 ---
 
-## 🏗️ Arquitectura del sistema
+##  Arquitectura del sistema
 
 El proyecto aplica **Clean Architecture** y **MVVM**, con separación entre presentación, reglas de negocio y fuentes de datos.
 
@@ -148,7 +148,7 @@ Para una evolución posterior se recomienda mover esta composición a un contene
 
 ---
 
-## 🗂️ Estructura del repositorio
+##  Estructura del repositorio
 
 ```text
 .
@@ -231,7 +231,7 @@ Campos principales del DTO:
 
 ---
 
-## 🧪 Calidad, pruebas y migraciones
+##  Calidad, pruebas y migraciones
 
 La estrategia está documentada en `docs/PLAN_PRUEBAS.md` e incluye 64 casos (`TC-01` a `TC-64`) asociados a las historias de usuario.
 
@@ -252,8 +252,7 @@ Comandos habituales:
 ```
 
 ---
-
-## 🔐 Seguridad, privacidad y manejo de fotografías
+##  Seguridad, privacidad y manejo de fotografías
 
 ### 1. Explique mínimo privilegio y aplíquelo a la selección de una fotografía
 
@@ -338,7 +337,7 @@ Otros controles recomendables son análisis de secretos en CI, `FileProvider` en
 
 ---
 
-## 🌐 Configuración actual y recomendaciones de producción
+##  Configuración actual y recomendaciones de producción
 
 El cliente HTTP actual usa una URL simulada configurada en `MainActivity.kt`:
 
@@ -365,7 +364,7 @@ Si se incorpora selección de imágenes o notificaciones, se debe justificar cad
 
 ---
 
-## 📚 Documentación relacionada
+##  Documentación relacionada
 
 - [Historias de usuario](docs/HU.md)
 - [Plan de pruebas](docs/PLAN_PRUEBAS.md)
@@ -374,7 +373,7 @@ Si se incorpora selección de imágenes o notificaciones, se debe justificar cad
 
 ---
 
-## 🤖 Uso de inteligencia artificial
+##  Uso de inteligencia artificial
 
 El desarrollo ha sido asistido por herramientas de IA para:
 
@@ -388,8 +387,9 @@ Cada cambio generado debe revisarse, ajustarse y validarse manualmente. La respo
 
 ---
 
-## 📄 Licencia y contexto académico
+##  Licencia y contexto académico
 
 Proyecto académico desarrollado en el marco de la formación ADSO del SENA. Antes de distribuirlo en producción se deben completar la gestión de secretos, autenticación real, observabilidad segura, política de privacidad, protección de datos y revisión de permisos.
-#   G e s t o r - d e - A p r e n d i c e s  
+#   G e s t o r - d e - A p r e n d i c e s 
+ 
  
