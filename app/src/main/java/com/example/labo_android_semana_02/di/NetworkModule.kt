@@ -1,12 +1,12 @@
 package com.example.labo_android_semana_02.di
 
 import com.example.labo_android_semana_02.BuildConfig
-import com.example.labo_android_semana_02.data.remote.SessionTokenProvider
-import com.example.labo_android_semana_02.data.remote.TokenProvider
+import com.example.labo_android_semana_02.data.remote.AuthInterceptor
 import com.example.labo_android_semana_02.data.remote.api.ActividadApi
-import com.example.labo_android_semana_02.data.remote.api.CategoriaApi
-import com.example.labo_android_semana_02.data.remote.api.ReporteApi
-import dagger.Binds
+import com.example.labo_android_semana_02.data.remote.api.AuthApi
+import com.example.labo_android_semana_02.data.remote.api.CursoApi
+import com.example.labo_android_semana_02.data.remote.api.ForoApi
+import com.example.labo_android_semana_02.data.remote.api.MaterialApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,14 +22,6 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class TokenModule {
-    @Binds
-    @Singleton
-    abstract fun bindTokenProvider(impl: SessionTokenProvider): TokenProvider
-}
-
-@Module
-@InstallIn(SingletonComponent::class)
 object NetworkModule {
 
     @Provides
@@ -37,49 +29,51 @@ object NetworkModule {
     fun provideJson(): Json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
+        encodeDefaults = true
     }
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS else HttpLoggingInterceptor.Level.NONE
             redactHeader("Authorization")
         }
         return OkHttpClient.Builder()
-            .addInterceptor(loggingInterceptor)
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
+            .addInterceptor(authInterceptor)
+            .addInterceptor(logging)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
-        return Retrofit.Builder()
+    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
             .baseUrl(BuildConfig.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-    }
 
     @Provides
     @Singleton
-    fun provideActividadApi(retrofit: Retrofit): ActividadApi =
-        retrofit.create(ActividadApi::class.java)
+    fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
 
     @Provides
     @Singleton
-    fun provideReporteApi(retrofit: Retrofit): ReporteApi =
-        retrofit.create(ReporteApi::class.java)
+    fun provideCursoApi(retrofit: Retrofit): CursoApi = retrofit.create(CursoApi::class.java)
 
     @Provides
     @Singleton
-    fun provideCategoriaApi(retrofit: Retrofit): CategoriaApi =
-        retrofit.create(CategoriaApi::class.java)
+    fun provideActividadApi(retrofit: Retrofit): ActividadApi = retrofit.create(ActividadApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideMaterialApi(retrofit: Retrofit): MaterialApi = retrofit.create(MaterialApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideForoApi(retrofit: Retrofit): ForoApi = retrofit.create(ForoApi::class.java)
 }

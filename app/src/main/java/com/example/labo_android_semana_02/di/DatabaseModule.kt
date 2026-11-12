@@ -2,10 +2,11 @@ package com.example.labo_android_semana_02.di
 
 import android.content.Context
 import androidx.room.Room
-import com.example.labo_android_semana_02.data.local.dao.ActividadDao
-import com.example.labo_android_semana_02.data.local.dao.CategoriaDao
-import com.example.labo_android_semana_02.data.local.dao.ReporteDao
+import com.example.labo_android_semana_02.data.local.db.ActividadDao
 import com.example.labo_android_semana_02.data.local.db.AppDatabase
+import com.example.labo_android_semana_02.data.local.db.CursoDao
+import com.example.labo_android_semana_02.data.local.db.MaterialDao
+import com.example.labo_android_semana_02.data.local.db.PersonaDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,25 +20,20 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
-        return Room.databaseBuilder(context, AppDatabase::class.java, "reportes_db")
-            .addMigrations(
-                AppDatabase.MIGRATION_1_2,
-                AppDatabase.MIGRATION_2_3,
-                AppDatabase.MIGRATION_3_4,
-                AppDatabase.MIGRATION_4_5
-            )
-            .addCallback(AppDatabase.SEED_CALLBACK)
+    fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, "ctma_lms_cache.db")
             .fallbackToDestructiveMigration()
             .build()
-    }
 
     @Provides
-    fun provideReporteDao(db: AppDatabase): ReporteDao = db.reporteDao()
-
-    @Provides
-    fun provideCategoriaDao(db: AppDatabase): CategoriaDao = db.categoriaDao()
+    fun provideCursoDao(db: AppDatabase): CursoDao = db.cursoDao()
 
     @Provides
     fun provideActividadDao(db: AppDatabase): ActividadDao = db.actividadDao()
+
+    @Provides
+    fun provideMaterialDao(db: AppDatabase): MaterialDao = db.materialDao()
+
+    @Provides
+    fun providePersonaDao(db: AppDatabase): PersonaDao = db.personaDao()
 }
