@@ -3,13 +3,17 @@ package com.example.labo_android_semana_02.ui.screens
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.labo_android_semana_02.domain.Categoria
 import com.example.labo_android_semana_02.domain.Reporte
 import com.example.labo_android_semana_02.ui.ListadoUiState
 import com.example.labo_android_semana_02.ui.calcularResumen
@@ -45,7 +50,15 @@ fun PantallaActividades(
     onRetry: () -> Unit,
     temaOscuro: Boolean = false,
     onToggleTema: (Boolean) -> Unit = {},
-    onToggleFavorito: (Reporte) -> Unit = {}
+    onToggleFavorito: (Reporte) -> Unit = {},
+    categorias: List<Categoria> = emptyList(),
+    categoriaSeleccionadaId: Int? = null,
+    onCategoriaSeleccionada: (Int?) -> Unit = {},
+    ordenActual: String = "FECHA_DESC",
+    onToggleOrden: () -> Unit = {},
+    syncEstado: String? = null,
+    sincronizando: Boolean = false,
+    onSyncClick: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val view = LocalView.current
@@ -54,10 +67,7 @@ fun PantallaActividades(
         view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
     }
 
-    // HU-18: reporte pendiente de confirmación de borrado (null = diálogo cerrado)
     var reporteAEliminar by remember { mutableStateOf<Reporte?>(null) }
-
-    // HU-22: utilidades del sistema para copiar y notificar
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
@@ -79,7 +89,35 @@ fun PantallaActividades(
                         actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     actions = {
-                        // HU-16 (CA-16.1): control para alternar entre modo claro y oscuro
+                        IconButton(onClick = {
+                            triggerHaptic()
+                            onToggleOrden()
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.SwapVert,
+                                contentDescription = if (ordenActual == "FECHA_ASC") "Orden ascendente" else "Orden descendente"
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                triggerHaptic()
+                                onSyncClick()
+                            },
+                            enabled = !sincronizando
+                        ) {
+                            if (sincronizando) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Sincronizar con MySQL"
+                                )
+                            }
+                        }
                         Icon(
                             imageVector = if (temaOscuro) Icons.Default.DarkMode else Icons.Default.LightMode,
                             contentDescription = null,
@@ -100,10 +138,38 @@ fun PantallaActividades(
                 OutlinedTextField(
                     value = busqueda,
                     onValueChange = onBusquedaChange,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                     placeholder = { Text("Buscar reporte...") },
                     singleLine = true
                 )
+                if (categorias.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = categoriaSeleccionadaId == null,
+                            onClick = {
+                                triggerHaptic()
+                                onCategoriaSeleccionada(null)
+                            },
+                            label = { Text("Todas") }
+                        )
+                        categorias.forEach { cat ->
+                            FilterChip(
+                                selected = categoriaSeleccionadaId == cat.id,
+                                onClick = {
+                                    triggerHaptic()
+                                    onCategoriaSeleccionada(cat.id)
+                                },
+                                label = { Text("${cat.icono} ${cat.nombre}") }
+                            )
+                        }
+                    }
+                }
             }
         },
         floatingActionButton = {
@@ -120,8 +186,28 @@ fun PantallaActividades(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+            syncEstado?.let { msg ->
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onSyncClick) {
+                            Text("Reintentar", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
 
-            // HU-17 (CA-17.1): resumen numérico siempre visible en la parte superior
             if (uiState !is ListadoUiState.Cargando) {
                 val resumen = reportes.calcularResumen()
                 ResumenContadores(
@@ -200,7 +286,6 @@ fun PantallaActividades(
         }
     }
 
-    // HU-18 (CA-18.1 y CA-18.2): diálogo modal de confirmación de borrado
     reporteAEliminar?.let { reporte ->
         AlertDialog(
             onDismissRequest = {
@@ -212,7 +297,6 @@ fun PantallaActividades(
             confirmButton = {
                 TextButton(onClick = {
                     triggerHaptic()
-                    // CA-18.3: solo aquí se remueve el registro de la fuente de verdad
                     onDeleteReporte(reporte)
                     reporteAEliminar = null
                 }) {
@@ -231,11 +315,6 @@ fun PantallaActividades(
     }
 }
 
-/**
- * HU-17: tarjeta compacta con el conteo de pendientes y completados.
- * Los valores se reciben ya calculados desde el listado, por lo que se recalculan
- * automáticamente en cada recomposición (agregar, eliminar o marcar/desmarcar).
- */
 @Composable
 fun ResumenContadores(
     pendientes: Int,

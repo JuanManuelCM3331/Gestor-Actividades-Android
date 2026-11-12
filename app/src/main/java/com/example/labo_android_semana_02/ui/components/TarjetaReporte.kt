@@ -124,7 +124,11 @@ fun TarjetaReporte(
                 if (expandida) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Fecha: $fechaTexto",
+                        text = buildString {
+                            append("Fecha: $fechaTexto")
+                            reporte.categoriaNombre?.let { append(" · $it") }
+                            if (!reporte.sincronizado) append(" · Pendiente sync")
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 48.dp)
