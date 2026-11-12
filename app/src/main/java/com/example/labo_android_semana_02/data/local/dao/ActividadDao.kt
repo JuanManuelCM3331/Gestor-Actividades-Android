@@ -9,6 +9,9 @@ interface ActividadDao {
     @Query("SELECT * FROM actividades ORDER BY fechaEntrega ASC")
     fun getAllActividades(): Flow<List<ActividadEntity>>
 
+    @Query("SELECT * FROM actividades WHERE id = :id")
+    fun getActividadById(id: Int): Flow<ActividadEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertActividades(actividades: List<ActividadEntity>)
 

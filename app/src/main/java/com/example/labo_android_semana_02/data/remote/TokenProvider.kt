@@ -1,13 +1,16 @@
 package com.example.labo_android_semana_02.data.remote
 
+import javax.inject.Inject
+import javax.inject.Singleton
+
 interface TokenProvider {
     fun getToken(): String
 }
 
-class SessionTokenProvider : TokenProvider {
+@Singleton
+class SessionTokenProvider @Inject constructor() : TokenProvider {
     override fun getToken(): String {
-        // En un entorno real, esto vendría de un DataStore o Session Manager
-        // PROHIBIDO: Literales reales o BuildConfig con secretos.
-        return "Bearer sample_token_12345" 
+        // En entorno productivo con autenticación de usuario, leer desde DataStore/EncryptedPrefs.
+        return "Bearer local_dev_session"
     }
 }
