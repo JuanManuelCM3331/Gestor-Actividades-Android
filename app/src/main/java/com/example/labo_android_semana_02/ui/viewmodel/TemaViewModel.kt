@@ -12,19 +12,18 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TemaViewModel @Inject constructor(
-    private val preferenciasRepository: PreferenciasRepository
+    private val preferenciasRepository: PreferenciasRepository,
 ) : ViewModel() {
 
-    val temaOscuro: StateFlow<Boolean?> = preferenciasRepository.temaOscuro
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null
-        )
+    val temaOscuro: StateFlow<Boolean> = preferenciasRepository.temaOscuroFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = false,
+    )
 
-    fun onToggleTema(oscuro: Boolean) {
+    fun alternarTema() {
         viewModelScope.launch {
-            preferenciasRepository.guardarTemaOscuro(oscuro)
+            preferenciasRepository.guardarTemaOscuro(!temaOscuro.value)
         }
     }
 }
