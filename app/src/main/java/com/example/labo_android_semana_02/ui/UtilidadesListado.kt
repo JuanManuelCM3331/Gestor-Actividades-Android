@@ -1,6 +1,7 @@
 package com.example.labo_android_semana_02.ui
 
 import com.example.labo_android_semana_02.domain.Reporte
+import com.example.labo_android_semana_02.domain.usecase.CalcularResumenReportesUseCase
 
 /**
  * HU-17: resumen numérico del listado (pendientes vs. completados).
@@ -14,13 +15,11 @@ data class ResumenListado(
 
 /**
  * HU-17 (CA-17.2): calcula el resumen a partir de la lista vigente.
- * Al derivarse de la propia lista, los contadores se recalculan de forma
- * automática cada vez que se agrega, elimina o cambia el estado de un registro.
  */
-fun List<Reporte>.calcularResumen(): ResumenListado = ResumenListado(
-    pendientes = count { !it.resuelto },
-    completados = count { it.resuelto }
-)
+fun List<Reporte>.calcularResumen(): ResumenListado {
+    val resumen = CalcularResumenReportesUseCase().invoke(this)
+    return ResumenListado(pendientes = resumen.pendientes, completados = resumen.completados)
+}
 
 /**
  * HU-22 (CA-22.2): texto formateado (ID y título) que se envía al portapapeles.

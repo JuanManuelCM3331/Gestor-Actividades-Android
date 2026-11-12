@@ -1,5 +1,6 @@
 package com.example.labo_android_semana_02.ui
 
+import com.example.labo_android_semana_02.domain.Categoria
 import com.example.labo_android_semana_02.domain.Prioridad
 
 data class FormularioActividadUiState(
@@ -8,9 +9,12 @@ data class FormularioActividadUiState(
     val fecha: String = "", // Formato dd/MM/yyyy
     val prioridad: Prioridad = Prioridad.MEDIA,
     val progreso: String = "0",
+    val categoriaId: Int = 1,
+    val categorias: List<Categoria> = emptyList(),
     val errores: Map<String, String> = emptyMap(),
     val puedeGuardar: Boolean = false,
     val guardando: Boolean = false,
+    val esEdicion: Boolean = false,
     val evidenciaFotoUri: String? = null,
     val evidenciaArchivoUri: String? = null
 ) {

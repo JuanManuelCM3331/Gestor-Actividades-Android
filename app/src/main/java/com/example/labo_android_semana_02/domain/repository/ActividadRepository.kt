@@ -5,5 +5,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface ActividadRepository {
     fun getActividades(): Flow<List<ActividadFormativa>>
+    fun getActividadById(id: Int): Flow<ActividadFormativa?>
     suspend fun refresh(): Result<Unit>
 }

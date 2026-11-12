@@ -3,25 +3,53 @@ package com.example.labo_android_semana_02.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.labo_android_semana_02.domain.Categoria
 import com.example.labo_android_semana_02.domain.Reporte
+import com.example.labo_android_semana_02.domain.repository.CategoriaRepository
 import com.example.labo_android_semana_02.domain.repository.PreferenciasRepository
 import com.example.labo_android_semana_02.domain.repository.ReporteRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ReporteViewModel(
+@HiltViewModel
+class ReporteViewModel private constructor(
     private val repository: ReporteRepository,
-    private val preferencias: PreferenciasRepository
+    private val preferencias: PreferenciasRepository,
+    private val categoriaRepository: CategoriaRepository?,
+    autoSync: Boolean
 ) : ViewModel() {
 
+    @Inject
+    constructor(
+        repository: ReporteRepository,
+        preferencias: PreferenciasRepository,
+        categoriaRepository: CategoriaRepository
+    ) : this(repository, preferencias, categoriaRepository, autoSync = true)
+
+    constructor(
+        repository: ReporteRepository,
+        preferencias: PreferenciasRepository
+    ) : this(repository, preferencias, null, autoSync = false)
+
     private val _busqueda = MutableStateFlow("")
-    val busqueda = _busqueda.asStateFlow()
+    val busqueda: StateFlow<String> = _busqueda.asStateFlow()
+
+    private val _categoriaSeleccionadaId = MutableStateFlow<Int?>(null)
+    val categoriaSeleccionadaId: StateFlow<Int?> = _categoriaSeleccionadaId.asStateFlow()
 
     private val _operacionState = MutableStateFlow<OperacionUiState>(OperacionUiState.Ideal)
-    val operacionState = _operacionState.asStateFlow()
+    val operacionState: StateFlow<OperacionUiState> = _operacionState.asStateFlow()
+
+    private val _syncEstado = MutableStateFlow<String?>(null)
+    val syncEstado: StateFlow<String?> = _syncEstado.asStateFlow()
+
+    private val _sincronizando = MutableStateFlow(false)
+    val sincronizando: StateFlow<Boolean> = _sincronizando.asStateFlow()
 
     /**
      * HU-21: conjunto de IDs marcados como favoritos. Se mantiene en el ViewModel
@@ -29,26 +57,44 @@ class ReporteViewModel(
      * antes de emitir el UiState.
      */
     private val _favoritos = MutableStateFlow<Set<Int>>(emptySet())
-    val favoritos = _favoritos.asStateFlow()
+    val favoritos: StateFlow<Set<Int>> = _favoritos.asStateFlow()
+
+    val categorias: StateFlow<List<Categoria>> = (categoriaRepository?.getCategorias() ?: flowOf(emptyList()))
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
+    val ordenActual: StateFlow<String> = preferencias.ordenFiltro
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = "FECHA_DESC"
+        )
 
     private data class EntradaListado(
         val reportes: List<Reporte>,
         val orden: String,
         val query: String,
-        val favoritos: Set<Int>
+        val favoritos: Set<Int>,
+        val categoriaId: Int?
     )
 
     val uiState: StateFlow<ListadoUiState> = combine(
         repository.getReportes(),
         preferencias.ordenFiltro,
         _busqueda,
-        _favoritos
-    ) { reportes, orden, query, favoritos ->
-        EntradaListado(reportes, orden, query, favoritos)
+        _favoritos,
+        _categoriaSeleccionadaId
+    ) { reportes, orden, query, favoritos, categoriaId ->
+        EntradaListado(reportes, orden, query, favoritos, categoriaId)
     }.mapLatest { entrada ->
-        val filtrados = entrada.reportes.filter {
-            it.titulo.contains(entrada.query, ignoreCase = true) ||
-            it.descripcion.contains(entrada.query, ignoreCase = true)
+        val filtrados = entrada.reportes.filter { reporte ->
+            val coincideTexto = reporte.titulo.contains(entrada.query, ignoreCase = true) ||
+                reporte.descripcion.contains(entrada.query, ignoreCase = true)
+            val coincideCategoria = entrada.categoriaId == null || reporte.categoriaId == entrada.categoriaId
+            coincideTexto && coincideCategoria
         }
 
         val ordenados = when (entrada.orden) {
@@ -56,7 +102,6 @@ class ReporteViewModel(
             else -> filtrados.sortedByDescending { it.fecha }
         }
 
-        // Proyectamos la bandera de favorito sobre cada elemento del listado
         val conFavoritos = ordenados.map { it.copy(esFavorito = entrada.favoritos.contains(it.id)) }
 
         if (conFavoritos.isEmpty()) ListadoUiState.Vacio
@@ -69,8 +114,33 @@ class ReporteViewModel(
         initialValue = ListadoUiState.Cargando
     )
 
+    init {
+        if (autoSync) {
+            sincronizarConServidor()
+        }
+    }
+
+    fun sincronizarConServidor() {
+        viewModelScope.launch {
+            _sincronizando.value = true
+            val result = repository.refreshReportes()
+            _sincronizando.value = false
+            result.fold(
+                onSuccess = { _syncEstado.value = null },
+                onFailure = { err ->
+                    if (err is CancellationException) throw err
+                    _syncEstado.value = err.message ?: "Modo offline activo"
+                }
+            )
+        }
+    }
+
     fun onBusquedaChange(query: String) {
         _busqueda.value = query
+    }
+
+    fun onCategoriaSeleccionada(categoriaId: Int?) {
+        _categoriaSeleccionadaId.value = if (_categoriaSeleccionadaId.value == categoriaId) null else categoriaId
     }
 
     /**
@@ -101,12 +171,11 @@ class ReporteViewModel(
         viewModelScope.launch {
             try {
                 repository.deleteReporte(reporte)
-                // Si el elemento eliminado estaba destacado, limpiamos su marca
                 _favoritos.update { it - reporte.id }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                // Manejo silencioso o vía snackbar
+            } catch (_: Exception) {
+                // Manejado por estado de sincronización si falla la red
             }
         }
     }

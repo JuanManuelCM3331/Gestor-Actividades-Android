@@ -27,5 +27,10 @@ data class ReporteEntity(
     @ColumnInfo(defaultValue = "0")
     val resuelto: Boolean = false,
     val evidenciaFotoUri: String? = null,
-    val evidenciaArchivoUri: String? = null
+    val evidenciaArchivoUri: String? = null,
+    val categoriaNombre: String? = null,
+    @ColumnInfo(defaultValue = "1")
+    val sincronizado: Boolean = true,
+    @ColumnInfo(defaultValue = "0")
+    val pendienteEliminar: Boolean = false
 )

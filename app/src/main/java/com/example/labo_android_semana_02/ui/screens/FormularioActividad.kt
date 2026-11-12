@@ -1,6 +1,7 @@
 package com.example.labo_android_semana_02.ui.screens
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +27,7 @@ fun FormularioActividad(
     onFechaChange: (String) -> Unit,
     onPrioridadChange: (Prioridad) -> Unit,
     onProgresoChange: (String) -> Unit,
+    onCategoriaChange: (Int) -> Unit = {},
     onTomarFoto: () -> Unit,
     onSubirFoto: () -> Unit,
     onSubirArchivo: () -> Unit,
@@ -44,7 +46,9 @@ fun FormularioActividad(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Formulario de Actividad con Evidencias") },
+                title = {
+                    Text(if (uiState.esEdicion) "Editar Reporte" else "Nuevo Reporte")
+                },
                 navigationIcon = {
                     TextButton(onClick = {
                         triggerHaptic()
@@ -92,6 +96,27 @@ fun FormularioActividad(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            if (uiState.categorias.isNotEmpty()) {
+                Text("Categoría", fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    uiState.categorias.forEach { cat ->
+                        FilterChip(
+                            selected = uiState.categoriaId == cat.id,
+                            onClick = {
+                                triggerHaptic()
+                                onCategoriaChange(cat.id)
+                            },
+                            label = { Text("${cat.icono} ${cat.nombre}") }
+                        )
+                    }
+                }
+            }
+
             Text("Prioridad", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Prioridad.entries.forEach { p ->
@@ -115,7 +140,6 @@ fun FormularioActividad(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Sección de Evidencias (Fotos y Archivos)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -125,7 +149,7 @@ fun FormularioActividad(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("Evidencia (Fotos y Archivos)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

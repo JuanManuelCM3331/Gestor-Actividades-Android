@@ -6,10 +6,11 @@ data class Reporte(
     val descripcion: String,
     val fecha: Long,
     val categoriaId: Int,
-    val resuelto: Boolean = false, // Nuevo campo para v2
-    // HU-21: bandera de "destacado". Vive únicamente en el UiState (no se persiste en Room),
-    // por eso se declara con valor por defecto y los mappers no la tocan.
+    val resuelto: Boolean = false,
+    // HU-21: bandera de "destacado". Vive únicamente en el UiState (no se persiste en BD).
     val esFavorito: Boolean = false,
     val evidenciaFotoUri: String? = null,
-    val evidenciaArchivoUri: String? = null
+    val evidenciaArchivoUri: String? = null,
+    val categoriaNombre: String? = null,
+    val sincronizado: Boolean = true
 )

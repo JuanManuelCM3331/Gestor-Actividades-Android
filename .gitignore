@@ -15,4 +15,8 @@
 local.properties
 
 .kotlin/
+.idea/.name
+backend/node_modules/
+backend/.env
+*.log
 

@@ -1,15 +1,16 @@
 package com.example.labo_android_semana_02.ui
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.labo_android_semana_02.domain.ActividadFormativa
 import com.example.labo_android_semana_02.domain.repository.ActividadRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.inject.Inject
 
 sealed interface ActividadesUiState {
     data object Cargando : ActividadesUiState
@@ -21,7 +22,8 @@ sealed interface ActividadesUiState {
     data class Error(val mensaje: String) : ActividadesUiState
 }
 
-class ActividadViewModel(
+@HiltViewModel
+class ActividadViewModel @Inject constructor(
     private val repository: ActividadRepository
 ) : ViewModel() {
 
@@ -60,7 +62,7 @@ class ActividadViewModel(
             val result = repository.refresh()
             if (result.isSuccess) {
                 val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-                _refreshState.value = "Actualizado a las ${sdf.format(Date())}"
+                _refreshState.value = "Sincronizado con MySQL (${sdf.format(Date())})"
             } else {
                 val error = result.exceptionOrNull()
                 if (error is CancellationException) throw error

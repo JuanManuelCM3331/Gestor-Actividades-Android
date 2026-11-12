@@ -364,7 +364,55 @@ Si se incorpora selección de imágenes o notificaciones, se debe justificar cad
 
 ---
 
-##  Documentación relacionada
+## ▶️ Cómo ejecutar la aplicación
+
+### Requisitos previos
+- **XAMPP** (servicio **MySQL** en el puerto `3306`; Apache es opcional si deseas usar phpMyAdmin).
+- **Node.js** (v18 o superior; probado con v22).
+- **Android Studio** o **Android SDK / Gradle** con un dispositivo físico (Depuración USB activa) o emulador.
+
+### 1. Inicializar MySQL y levantar la API REST
+1. Abre **XAMPP Control Panel** e inicia **MySQL**.
+2. Crea la base de datos relacional (`gestor_actividades_ctma`), las tablas y los datos iniciales:
+   ```powershell
+   cd backend
+   npm.cmd install
+   npm.cmd run init-db
+   ```
+3. Inicia el servidor REST (puerto `3000`):
+   ```powershell
+   npm.cmd start
+   ```
+4. Verifica en tu navegador que la API responde conectada a MySQL:
+   `http://localhost:3000/api/health`
+
+### 2. Configurar la URL del servidor en la app Android
+En [gradle.properties](gradle.properties) ajusta `API_BASE_URL` según cómo vayas a probar:
+- **Dispositivo físico por cable USB (recomendado):**
+  ```properties
+  API_BASE_URL=http://127.0.0.1:3000/
+  ```
+  Y redirige el puerto desde PowerShell:
+  ```powershell
+  & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:3000 tcp:3000
+  ```
+- **Dispositivo físico por Wi-Fi:** usa la IP LAN de tu PC (por ejemplo `http://192.168.78.114:3000/`) y permite el puerto TCP `3000` en el Firewall de Windows.
+- **Emulador Android:** usa `http://10.0.2.2:3000/`.
+
+### 3. Ejecutar la app en tu dispositivo
+- **Opción A — PowerShell:**
+  ```powershell
+  .\gradlew installDebug --no-daemon
+  & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" shell am start -n com.example.labo_android_semana_02/.MainActivity
+  ```
+- **Opción B — Android Studio (botón Run ▶):**
+  1. Si modificaste `gradle.properties` o archivos `.gradle.kts`, ejecuta primero **File → Sync Project with Gradle Files**.
+  2. Selecciona la configuración **`app`** y tu dispositivo en la barra superior y pulsa **Run ▶**.
+  3. *Nota:* si el botón ▶ aparece deshabilitado o con error de módulo, abre **Edit Configurations... → Android App → app**, verifica que el módulo sea `labo_android_semana_02.app` y revisa la pestaña **Build / Sync** por si Android Studio requiere sincronización o actualización compatible con AGP `9.3.1`.
+
+---
+
+## 📚 Documentación relacionada
 
 - [Historias de usuario](docs/HU.md)
 - [Plan de pruebas](docs/PLAN_PRUEBAS.md)
