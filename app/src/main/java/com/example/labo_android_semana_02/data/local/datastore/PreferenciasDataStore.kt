@@ -15,9 +15,13 @@ import com.example.labo_android_semana_02.domain.model.AuthSession
 import com.example.labo_android_semana_02.domain.model.RolUsuario
 import com.example.labo_android_semana_02.domain.model.Usuario
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.security.KeyStore
 import java.util.concurrent.atomic.AtomicReference
 import javax.crypto.Cipher
@@ -99,6 +103,15 @@ class PreferenciasDataStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val tokenHolder: SessionTokenHolder,
 ) {
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        // PERF-03: Pre-cargar el token en memoria en segundo plano al inicializar DataStore
+        ioScope.launch {
+            runCatching { loadTokenIfMissing() }
+        }
+    }
+
     private object Keys {
         val TEMA_OSCURO = booleanPreferencesKey("tema_oscuro")
         val JWT_TOKEN = stringPreferencesKey("jwt_token")

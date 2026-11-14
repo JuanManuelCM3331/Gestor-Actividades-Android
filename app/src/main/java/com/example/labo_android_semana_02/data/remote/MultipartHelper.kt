@@ -10,8 +10,9 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.ByteArrayOutputStream
+import okio.BufferedSink
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -94,32 +95,51 @@ class MultipartHelper @Inject constructor(
 
         return runCatching {
             val uri = Uri.parse(archivo.uriString)
-            val stream = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
-                File(uri.path!!).inputStream()
+            val localFile = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                File(uri.path!!)
             } else {
-                context.contentResolver.openInputStream(uri)
+                null
             }
-            val bytes = stream?.use { input ->
-                val out = ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                var total = 0L
-                var read = input.read(buffer)
-                while (read != -1) {
-                    total += read
-                    if (total > ValidarArchivoUseCase.MAX_FILE_SIZE_BYTES) {
-                        throw IllegalArgumentException(
-                            "'${archivo.nombre}' supera el límite máximo de ${ValidarArchivoUseCase.MAX_FILE_SIZE_MB} MB."
-                        )
-                    }
-                    out.write(buffer, 0, read)
-                    read = input.read(buffer)
-                }
-                out.toByteArray()
-            } ?: throw IllegalStateException("No se pudo abrir '${archivo.nombre}'.")
+
+            if (localFile != null && (!localFile.exists() || !localFile.canRead())) {
+                throw IllegalStateException("No se pudo abrir '${archivo.nombre}'.")
+            }
 
             val mediaType = archivo.mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()
-            val body = bytes.toRequestBody(mediaType)
-            MultipartBody.Part.createFormData(fieldName, archivo.nombre, body)
+
+            // PERF-01: RequestBody por streaming (bloques de 8 KB) sin cargar el archivo completo en RAM
+            val streamingBody = object : RequestBody() {
+                override fun contentType() = mediaType
+
+                override fun contentLength(): Long =
+                    archivo.tamanoBytes.takeIf { it in 1..ValidarArchivoUseCase.MAX_FILE_SIZE_BYTES } ?: -1L
+
+                override fun writeTo(sink: BufferedSink) {
+                    val stream = if (localFile != null) {
+                        localFile.inputStream()
+                    } else {
+                        context.contentResolver.openInputStream(uri)
+                    } ?: throw IOException("No se pudo abrir '${archivo.nombre}'.")
+
+                    stream.use { input ->
+                        val buffer = ByteArray(8192)
+                        var total = 0L
+                        var read = input.read(buffer)
+                        while (read != -1) {
+                            total += read
+                            if (total > ValidarArchivoUseCase.MAX_FILE_SIZE_BYTES) {
+                                throw IOException(
+                                    "'${archivo.nombre}' supera el límite máximo de ${ValidarArchivoUseCase.MAX_FILE_SIZE_MB} MB."
+                                )
+                            }
+                            sink.write(buffer, 0, read)
+                            read = input.read(buffer)
+                        }
+                    }
+                }
+            }
+
+            MultipartBody.Part.createFormData(fieldName, archivo.nombre, streamingBody)
         }
     }
 }

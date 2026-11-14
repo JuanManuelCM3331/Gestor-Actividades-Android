@@ -7,6 +7,7 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.util.LruCache
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -304,22 +305,52 @@ private fun TarjetaEnlaceChat(
     }
 }
 
+// PERF-02: Caché LRU en memoria y decodificación con submuestreo (inSampleSize) para miniaturas del chat
+private val chatImageBitmapCache = LruCache<Int, ImageBitmap>(24)
+
+private fun decodificarImagenEscalada(file: File, maxDimensionPx: Int = 800): ImageBitmap? {
+    val boundsOptions = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+    val srcWidth = boundsOptions.outWidth
+    val srcHeight = boundsOptions.outHeight
+    if (srcWidth <= 0 || srcHeight <= 0) return null
+
+    var sampleSize = 1
+    while ((srcWidth / sampleSize) > maxDimensionPx || (srcHeight / sampleSize) > maxDimensionPx) {
+        sampleSize *= 2
+    }
+
+    val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+    }
+    return BitmapFactory.decodeFile(file.absolutePath, decodeOptions)?.asImageBitmap()
+}
+
 @Composable
 private fun TarjetaImagenChat(
     adjunto: ArchivoAdjunto,
     onDescargarEnCache: suspend (ArchivoAdjunto) -> Result<File>,
     onAbrirExterno: () -> Unit,
 ) {
-    var bitmap by remember(adjunto.id) { mutableStateOf<ImageBitmap?>(null) }
-    var cargando by remember(adjunto.id) { mutableStateOf(true) }
+    var bitmap by remember(adjunto.id) { mutableStateOf(chatImageBitmapCache.get(adjunto.id)) }
+    var cargando by remember(adjunto.id) { mutableStateOf(bitmap == null) }
 
     LaunchedEffect(adjunto.id) {
+        if (bitmap != null) {
+            cargando = false
+            return@LaunchedEffect
+        }
         cargando = true
         val res = onDescargarEnCache(adjunto)
         val decoded = withContext(Dispatchers.IO) {
             res.getOrNull()?.let { file ->
-                runCatching { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }.getOrNull()
+                runCatching { decodificarImagenEscalada(file) }.getOrNull()
             }
+        }
+        if (decoded != null) {
+            chatImageBitmapCache.put(adjunto.id, decoded)
         }
         bitmap = decoded
         cargando = false

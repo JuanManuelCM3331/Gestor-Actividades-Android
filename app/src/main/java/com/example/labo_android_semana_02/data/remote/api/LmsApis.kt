@@ -180,6 +180,8 @@ interface ForoApi {
         @Path("cursoId") cursoId: Int,
         @Query("tipo") tipo: String,
         @Query("aprendizId") aprendizId: Int? = null,
+        @Query("beforeId") beforeId: Int? = null,
+        @Query("limit") limit: Int? = 150,
     ): List<MensajeForoDto>
 
     @Multipart
