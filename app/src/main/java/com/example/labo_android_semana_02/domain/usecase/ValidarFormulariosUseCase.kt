@@ -1,11 +1,18 @@
 package com.example.labo_android_semana_02.domain.usecase
 
 import com.example.labo_android_semana_02.domain.model.ArchivoLocal
+import com.example.labo_android_semana_02.domain.model.RolUsuario
 
 class ValidarFormulariosUseCase {
 
     private val emailRegex = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
     private val urlRegex = Regex("^https?://.+", RegexOption.IGNORE_CASE)
+    private val dominiosInstructorPermitidos = setOf(
+        "sena.edu.co",
+        "misena.edu.co",
+        "ctma.edu.co",
+        "test.edu.co",
+    )
 
     fun validarLogin(email: String, password: String): String? {
         if (!emailRegex.matches(email.trim())) return "Ingresa un correo electrónico válido."
@@ -13,10 +20,22 @@ class ValidarFormulariosUseCase {
         return null
     }
 
-    fun validarRegistro(nombre: String, email: String, password: String): String? {
+    fun validarRegistro(
+        nombre: String,
+        email: String,
+        password: String,
+        rol: RolUsuario = RolUsuario.APRENDIZ,
+    ): String? {
         if (nombre.trim().length < 3) return "El nombre completo debe tener al menos 3 caracteres."
-        if (!emailRegex.matches(email.trim())) return "Ingresa un correo electrónico válido."
+        val cleanEmail = email.trim().lowercase()
+        if (!emailRegex.matches(cleanEmail)) return "Ingresa un correo electrónico válido."
         if (password.length < 6) return "La contraseña debe tener mínimo 6 caracteres."
+        if (rol == RolUsuario.INSTRUCTOR) {
+            val dominio = cleanEmail.substringAfterLast('@', "")
+            if (dominio !in dominiosInstructorPermitidos) {
+                return "Para registrarte como Instructor debes usar un correo institucional (@sena.edu.co o @ctma.edu.co)."
+            }
+        }
         return null
     }
 

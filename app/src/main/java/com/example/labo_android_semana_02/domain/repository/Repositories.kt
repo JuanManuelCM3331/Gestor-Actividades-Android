@@ -24,6 +24,11 @@ interface AuthRepository {
     suspend fun login(email: String, password: String): Result<AuthSession>
     suspend fun register(nombre: String, email: String, password: String, rol: RolUsuario): Result<AuthSession>
     suspend fun refreshMe(): Result<Usuario>
+    suspend fun actualizarPerfil(nombre: String): Result<Usuario>
+    suspend fun cambiarPassword(passwordActual: String, passwordNueva: String): Result<String>
+    suspend fun solicitarRecuperacionPassword(email: String): Result<Pair<String, String?>>
+    suspend fun confirmarRecuperacionPassword(email: String, codigo: String, passwordNueva: String): Result<String>
+    suspend fun eliminarCuenta(password: String): Result<Unit>
     suspend fun logout()
 }
 

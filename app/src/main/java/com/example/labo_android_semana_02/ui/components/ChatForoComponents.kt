@@ -7,17 +7,20 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.util.LruCache
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -25,6 +28,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -304,25 +311,65 @@ private fun TarjetaEnlaceChat(
     }
 }
 
+// PERF-02: Caché LRU en memoria y decodificación con submuestreo (inSampleSize) para miniaturas del chat
+private val chatImageBitmapCache = LruCache<Int, ImageBitmap>(24)
+
+private fun decodificarImagenEscalada(file: File, maxDimensionPx: Int = 800): ImageBitmap? {
+    val boundsOptions = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+    val srcWidth = boundsOptions.outWidth
+    val srcHeight = boundsOptions.outHeight
+    if (srcWidth <= 0 || srcHeight <= 0) return null
+
+    var sampleSize = 1
+    while ((srcWidth / sampleSize) > maxDimensionPx || (srcHeight / sampleSize) > maxDimensionPx) {
+        sampleSize *= 2
+    }
+
+    val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+    }
+    return BitmapFactory.decodeFile(file.absolutePath, decodeOptions)?.asImageBitmap()
+}
+
 @Composable
 private fun TarjetaImagenChat(
     adjunto: ArchivoAdjunto,
     onDescargarEnCache: suspend (ArchivoAdjunto) -> Result<File>,
     onAbrirExterno: () -> Unit,
 ) {
-    var bitmap by remember(adjunto.id) { mutableStateOf<ImageBitmap?>(null) }
-    var cargando by remember(adjunto.id) { mutableStateOf(true) }
+    var bitmap by remember(adjunto.id) { mutableStateOf(chatImageBitmapCache.get(adjunto.id)) }
+    var cargando by remember(adjunto.id) { mutableStateOf(bitmap == null) }
+    var mostrarVisorZoom by remember(adjunto.id) { mutableStateOf(false) }
 
     LaunchedEffect(adjunto.id) {
+        if (bitmap != null) {
+            cargando = false
+            return@LaunchedEffect
+        }
         cargando = true
         val res = onDescargarEnCache(adjunto)
         val decoded = withContext(Dispatchers.IO) {
             res.getOrNull()?.let { file ->
-                runCatching { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }.getOrNull()
+                runCatching { decodificarImagenEscalada(file) }.getOrNull()
             }
+        }
+        if (decoded != null) {
+            chatImageBitmapCache.put(adjunto.id, decoded)
         }
         bitmap = decoded
         cargando = false
+    }
+
+    if (mostrarVisorZoom && bitmap != null) {
+        DialogoVisorImagenZoom(
+            bitmap = bitmap!!,
+            nombreArchivo = adjunto.nombreOriginal,
+            onAbrirExterno = onAbrirExterno,
+            onDismiss = { mostrarVisorZoom = false },
+        )
     }
 
     Surface(
@@ -331,7 +378,13 @@ private fun TarjetaImagenChat(
         border = BorderStroke(1.dp, MaterialTheme.coloresExtendidos.exito.copy(alpha = 0.35f)),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onAbrirExterno),
+            .clickable {
+                if (bitmap != null) {
+                    mostrarVisorZoom = true
+                } else {
+                    onAbrirExterno()
+                }
+            },
     ) {
         Column {
             val bmp = bitmap
@@ -390,6 +443,107 @@ private fun TarjetaImagenChat(
                     tint = MaterialTheme.coloresExtendidos.exito,
                     modifier = Modifier.size(18.dp),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogoVisorImagenZoom(
+    bitmap: ImageBitmap,
+    nombreArchivo: String,
+    onAbrirExterno: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.92f)),
+        ) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = nombreArchivo,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            val nextScale = (scale * zoom).coerceIn(1f, 4f)
+                            scale = nextScale
+                            if (nextScale > 1f) {
+                                offsetX += pan.x
+                                offsetY += pan.y
+                            } else {
+                                offsetX = 0f
+                                offsetY = 0f
+                            }
+                        }
+                    }
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offsetX,
+                        translationY = offsetY,
+                    ),
+            )
+
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = nombreArchivo,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (scale > 1.05f) {
+                            AppTextButton(
+                                onClick = {
+                                    scale = 1f
+                                    offsetX = 0f
+                                    offsetY = 0f
+                                },
+                            ) {
+                                Text("1x")
+                            }
+                        }
+                        AppIconButton(onClick = onAbrirExterno) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = "Abrir en visor externo",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        AppIconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Cerrar visor",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

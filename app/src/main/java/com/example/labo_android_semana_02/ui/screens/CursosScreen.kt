@@ -61,6 +61,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -100,10 +104,14 @@ fun CursosScreen(
     onSalirseCurso: (Int) -> Unit,
     onCerrarSesion: () -> Unit,
     onLimpiarFeedback: () -> Unit,
+    onActualizarPerfil: (String) -> Unit = {},
+    onCambiarPassword: (String, String) -> Unit = { _, _ -> },
+    onEliminarCuenta: (String) -> Unit = {},
 ) {
     val esInstructor = state.usuario?.rol == RolUsuario.INSTRUCTOR
     var mostrarDialogoCrearEditar by remember { mutableStateOf<Pair<Boolean, Curso?>?>(null) }
     var mostrarDialogoUnirse by remember { mutableStateOf(false) }
+    var mostrarDialogoMiCuenta by remember { mutableStateOf(false) }
     var cursoAEliminar by remember { mutableStateOf<Curso?>(null) }
     var cursoASalir by remember { mutableStateOf<Curso?>(null) }
 
@@ -148,6 +156,13 @@ fun CursosScreen(
                             contentDescription = if (temaOscuro) "Cambiar a modo claro" else "Cambiar a modo oscuro",
                             tint = if (temaOscuro) MaterialTheme.coloresExtendidos.advertencia
                             else MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    AppIconButton(onClick = { mostrarDialogoMiCuenta = true }) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = "Mi cuenta y perfil",
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                     AppIconButton(onClick = onRefrescar) {
@@ -343,6 +358,27 @@ fun CursosScreen(
                 cursoASalir = null
             },
             onCancelar = { cursoASalir = null },
+        )
+    }
+
+    if (mostrarDialogoMiCuenta) {
+        DialogoMiCuenta(
+            nombreActual = state.usuario?.nombre.orEmpty(),
+            emailActual = state.usuario?.email.orEmpty(),
+            rolActual = state.usuario?.rol?.name.orEmpty(),
+            onDismiss = { mostrarDialogoMiCuenta = false },
+            onGuardarNombre = { nuevoNombre ->
+                onActualizarPerfil(nuevoNombre)
+                mostrarDialogoMiCuenta = false
+            },
+            onCambiarPassword = { actual, nueva ->
+                onCambiarPassword(actual, nueva)
+                mostrarDialogoMiCuenta = false
+            },
+            onEliminarCuenta = { passwordConfirm ->
+                onEliminarCuenta(passwordConfirm)
+                mostrarDialogoMiCuenta = false
+            },
         )
     }
 }
@@ -648,6 +684,129 @@ private fun DialogoUnirseCurso(
         },
         dismissButton = {
             AppTextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+    )
+}
+
+@Composable
+private fun DialogoMiCuenta(
+    nombreActual: String,
+    emailActual: String,
+    rolActual: String,
+    onDismiss: () -> Unit,
+    onGuardarNombre: (String) -> Unit,
+    onCambiarPassword: (String, String) -> Unit,
+    onEliminarCuenta: (String) -> Unit,
+) {
+    var nombre by remember { mutableStateOf(nombreActual) }
+    var passwordActual by remember { mutableStateOf("") }
+    var passwordNueva by remember { mutableStateOf("") }
+    var passwordConfirmarEliminacion by remember { mutableStateOf("") }
+    var mostrarConfirmacionEliminar by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        title = { Text("Mi cuenta ($rolActual)") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = emailActual,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = nombre,
+                    onValueChange = { nombre = it },
+                    label = { Text("Nombre completo") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                AppButton(
+                    onClick = { onGuardarNombre(nombre) },
+                    icon = Icons.Default.Edit,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Guardar nombre")
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    text = "Cambiar contraseña",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = passwordActual,
+                    onValueChange = { passwordActual = it },
+                    label = { Text("Contraseña actual") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = passwordNueva,
+                    onValueChange = { passwordNueva = it },
+                    label = { Text("Nueva contraseña (mín. 6 caracteres)") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                AppOutlinedButton(
+                    onClick = { onCambiarPassword(passwordActual, passwordNueva) },
+                    icon = Icons.Default.Key,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Actualizar contraseña")
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    text = "Eliminar cuenta permanentemente",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                if (!mostrarConfirmacionEliminar) {
+                    AppOutlinedButton(
+                        onClick = { mostrarConfirmacionEliminar = true },
+                        icon = Icons.Default.Delete,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Eliminar mi cuenta", color = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    Text(
+                        text = "Esta acción eliminará tu cuenta y tus datos asociados de forma permanente. Ingresa tu contraseña para confirmar:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedTextField(
+                        value = passwordConfirmarEliminacion,
+                        onValueChange = { passwordConfirmarEliminacion = it },
+                        label = { Text("Confirmar contraseña") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    AppButton(
+                        onClick = { onEliminarCuenta(passwordConfirmarEliminacion) },
+                        icon = Icons.Default.Delete,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Confirmar eliminación definitiva")
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            AppTextButton(onClick = onDismiss) { Text("Cerrar") }
         },
     )
 }

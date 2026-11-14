@@ -3,7 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const multer = require('multer');
 const { checkDatabaseConnection } = require('./config/db');
-const { MAX_FILE_SIZE_MB } = require('./config/env');
+const { MAX_FILE_SIZE_MB, CORS_ORIGINS } = require('./config/env');
+const { createRateLimiter } = require('./middleware/rateLimiter');
 const authRouter = require('./routes/auth');
 const cursosRouter = require('./routes/cursos');
 const actividadesRouter = require('./routes/actividades');
@@ -14,18 +15,42 @@ const archivosRouter = require('./routes/archivos');
 const app = express();
 
 app.use(helmet());
-app.use(cors());
-app.use(express.json({ limit: '5mb' }));
 
+// SEC-05: Configuración de CORS restringida si se definen orígenes permitidos
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || !CORS_ORIGINS || CORS_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Origen no autorizado por política CORS.'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
+// SEC-03: Limitador global de peticiones por IP
+app.use(
+  createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 180,
+    message: 'Demasiadas peticiones desde esta dirección. Intenta de nuevo en un minuto.',
+  })
+);
+
+app.use(express.json({ limit: '2mb' }));
+
+// SEC-05: No exponer detalles internos de error de base de datos en /api/health
 app.get('/api/health', async (_req, res) => {
   try {
     await checkDatabaseConnection();
     res.json({ status: 'ok', database: 'mysql', maxFileSizeMb: MAX_FILE_SIZE_MB, timestamp: Date.now() });
-  } catch (err) {
+  } catch (_err) {
     res.status(503).json({
       status: 'error',
       database: 'unavailable',
-      message: err.message,
+      message: 'Servicio de base de datos temporalmente no disponible.',
     });
   }
 });

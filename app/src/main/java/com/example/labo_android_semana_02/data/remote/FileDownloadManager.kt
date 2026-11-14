@@ -79,6 +79,15 @@ class FileDownloadManager @Inject constructor(
         context.startActivity(intent)
     }
 
+    /**
+     * SEC-06: Elimina recursivamente los archivos descargados y las grabaciones
+     * temporales de voz del foro al cerrar sesión o cambiar de cuenta.
+     */
+    fun limpiarArchivosTemporales() {
+        runCatching { File(context.cacheDir, "descargas").deleteRecursively() }
+        runCatching { File(context.cacheDir, "grabaciones_foro").deleteRecursively() }
+    }
+
     suspend fun guardarYCompartirExcel(
         bytes: ByteArray,
         nombreArchivo: String,

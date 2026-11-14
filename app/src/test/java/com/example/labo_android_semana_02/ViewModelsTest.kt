@@ -76,6 +76,30 @@ class ViewModelsTest {
         override suspend fun refreshMe(): Result<Usuario> =
             state.value?.usuario?.let { Result.success(it) } ?: Result.failure(IllegalStateException("Sin sesión"))
 
+        override suspend fun actualizarPerfil(nombre: String): Result<Usuario> {
+            val current = state.value ?: return Result.failure(IllegalStateException("Sin sesión"))
+            val updated = current.usuario.copy(nombre = nombre)
+            state.value = current.copy(usuario = updated)
+            return Result.success(updated)
+        }
+
+        override suspend fun cambiarPassword(passwordActual: String, passwordNueva: String): Result<String> =
+            Result.success("Contraseña actualizada correctamente.")
+
+        override suspend fun solicitarRecuperacionPassword(email: String): Result<Pair<String, String?>> =
+            Result.success("Código generado." to "123456")
+
+        override suspend fun confirmarRecuperacionPassword(
+            email: String,
+            codigo: String,
+            passwordNueva: String,
+        ): Result<String> = Result.success("Contraseña restablecida correctamente.")
+
+        override suspend fun eliminarCuenta(password: String): Result<Unit> {
+            state.value = null
+            return Result.success(Unit)
+        }
+
         override suspend fun logout() {
             state.value = null
         }

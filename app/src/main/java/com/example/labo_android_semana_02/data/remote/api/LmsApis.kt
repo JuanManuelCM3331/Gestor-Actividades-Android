@@ -2,24 +2,31 @@ package com.example.labo_android_semana_02.data.remote.api
 
 import com.example.labo_android_semana_02.data.remote.dto.ActividadDto
 import com.example.labo_android_semana_02.data.remote.dto.ActividadEntregasGrupoDto
+import com.example.labo_android_semana_02.data.remote.dto.ActualizarPerfilRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.AuthResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.CalificarRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CalificarResponseDto
+import com.example.labo_android_semana_02.data.remote.dto.CambiarPasswordRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CodigoEstadoRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CodigoResponseDto
+import com.example.labo_android_semana_02.data.remote.dto.ConfirmarRecuperacionRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CrearHiloRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CursoDto
 import com.example.labo_android_semana_02.data.remote.dto.CursoUpsertRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.EliminarCuentaRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.EntregaDetalleDto
 import com.example.labo_android_semana_02.data.remote.dto.HiloForoDetalleResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.HiloForoDto
 import com.example.labo_android_semana_02.data.remote.dto.LoginRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.MaterialApoyoDto
 import com.example.labo_android_semana_02.data.remote.dto.MensajeForoDto
+import com.example.labo_android_semana_02.data.remote.dto.MensajeResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.PersonasCursoResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.RegisterRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.ResponderHiloRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.ResumenCalificacionEstudianteDto
+import com.example.labo_android_semana_02.data.remote.dto.SolicitarRecuperacionRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.SolicitarRecuperacionResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.UnirseCursoRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.UnirseCursoResponseDto
 import com.example.labo_android_semana_02.data.remote.dto.UsuarioDto
@@ -46,6 +53,28 @@ interface AuthApi {
 
     @GET("api/auth/me")
     suspend fun me(): UsuarioDto
+
+    @POST("api/auth/logout")
+    suspend fun logout(): Response<Unit>
+
+    @PUT("api/auth/perfil")
+    suspend fun actualizarPerfil(@Body request: ActualizarPerfilRequestDto): UsuarioDto
+
+    @PUT("api/auth/password")
+    suspend fun cambiarPassword(@Body request: CambiarPasswordRequestDto): MensajeResponseDto
+
+    @POST("api/auth/recuperar/solicitar")
+    suspend fun solicitarRecuperacion(
+        @Body request: SolicitarRecuperacionRequestDto,
+    ): SolicitarRecuperacionResponseDto
+
+    @POST("api/auth/recuperar/confirmar")
+    suspend fun confirmarRecuperacion(
+        @Body request: ConfirmarRecuperacionRequestDto,
+    ): MensajeResponseDto
+
+    @POST("api/auth/eliminar-cuenta")
+    suspend fun eliminarCuenta(@Body request: EliminarCuentaRequestDto): Response<Unit>
 }
 
 interface CursoApi {
@@ -177,6 +206,8 @@ interface ForoApi {
         @Path("cursoId") cursoId: Int,
         @Query("tipo") tipo: String,
         @Query("aprendizId") aprendizId: Int? = null,
+        @Query("beforeId") beforeId: Int? = null,
+        @Query("limit") limit: Int? = 150,
     ): List<MensajeForoDto>
 
     @Multipart

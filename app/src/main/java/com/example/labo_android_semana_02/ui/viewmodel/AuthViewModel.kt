@@ -31,6 +31,12 @@ data class AuthUiState(
     val rolSeleccionado: RolUsuario = RolUsuario.APRENDIZ,
     val cargando: Boolean = false,
     val error: String? = null,
+    val mensaje: String? = null,
+    val mostrarDialogoRecuperar: Boolean = false,
+    val recuperarEmail: String = "",
+    val recuperarCodigo: String = "",
+    val recuperarNuevaPassword: String = "",
+    val codigoOtpGenerado: String? = null,
 )
 
 @HiltViewModel
@@ -54,17 +60,104 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
-    fun onNombreChange(value: String) = _uiState.update { it.copy(nombre = value, error = null) }
-    fun onEmailChange(value: String) = _uiState.update { it.copy(email = value, error = null) }
-    fun onPasswordChange(value: String) = _uiState.update { it.copy(password = value, error = null) }
-    fun onRolChange(rol: RolUsuario) = _uiState.update { it.copy(rolSeleccionado = rol, error = null) }
-    fun alternarModo() = _uiState.update { it.copy(esRegistro = !it.esRegistro, error = null) }
-    fun limpiarError() = _uiState.update { it.copy(error = null) }
+    fun onNombreChange(value: String) = _uiState.update { it.copy(nombre = value, error = null, mensaje = null) }
+    fun onEmailChange(value: String) = _uiState.update { it.copy(email = value, error = null, mensaje = null) }
+    fun onPasswordChange(value: String) = _uiState.update { it.copy(password = value, error = null, mensaje = null) }
+    fun onRolChange(rol: RolUsuario) = _uiState.update { it.copy(rolSeleccionado = rol, error = null, mensaje = null) }
+    fun alternarModo() = _uiState.update { it.copy(esRegistro = !it.esRegistro, error = null, mensaje = null) }
+    fun limpiarError() = _uiState.update { it.copy(error = null, mensaje = null) }
+
+    fun abrirDialogoRecuperar() {
+        _uiState.update {
+            it.copy(
+                mostrarDialogoRecuperar = true,
+                recuperarEmail = it.email,
+                recuperarCodigo = "",
+                recuperarNuevaPassword = "",
+                codigoOtpGenerado = null,
+                error = null,
+                mensaje = null,
+            )
+        }
+    }
+
+    fun cerrarDialogoRecuperar() {
+        _uiState.update {
+            it.copy(
+                mostrarDialogoRecuperar = false,
+                codigoOtpGenerado = null,
+            )
+        }
+    }
+
+    fun onRecuperarEmailChange(value: String) = _uiState.update { it.copy(recuperarEmail = value, error = null) }
+    fun onRecuperarCodigoChange(value: String) = _uiState.update { it.copy(recuperarCodigo = value, error = null) }
+    fun onRecuperarPasswordChange(value: String) = _uiState.update { it.copy(recuperarNuevaPassword = value, error = null) }
+
+    fun solicitarCodigoRecuperacion() {
+        val correo = _uiState.value.recuperarEmail.trim()
+        if (correo.isBlank() || !correo.contains("@")) {
+            _uiState.update { it.copy(error = "Ingresa un correo electrónico válido para generar el código.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargando = true, error = null) }
+            authRepository.solicitarRecuperacionPassword(correo).fold(
+                onSuccess = { (msg, otp) ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            codigoOtpGenerado = otp,
+                            recuperarCodigo = otp ?: it.recuperarCodigo,
+                            mensaje = msg,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(cargando = false, error = e.message) }
+                },
+            )
+        }
+    }
+
+    fun confirmarRecuperacionPassword() {
+        val st = _uiState.value
+        if (st.recuperarEmail.isBlank() || st.recuperarCodigo.trim().length < 6 || st.recuperarNuevaPassword.length < 6) {
+            _uiState.update {
+                it.copy(error = "Ingresa el correo, el código de 6 dígitos y una contraseña de mínimo 6 caracteres.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargando = true, error = null) }
+            authRepository.confirmarRecuperacionPassword(
+                email = st.recuperarEmail,
+                codigo = st.recuperarCodigo,
+                passwordNueva = st.recuperarNuevaPassword,
+            ).fold(
+                onSuccess = { msg ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            mostrarDialogoRecuperar = false,
+                            email = st.recuperarEmail,
+                            password = "",
+                            codigoOtpGenerado = null,
+                            mensaje = msg,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(cargando = false, error = e.message) }
+                },
+            )
+        }
+    }
 
     fun enviarFormulario() {
         val state = _uiState.value
         val errorLocal = if (state.esRegistro) {
-            validador.validarRegistro(state.nombre, state.email, state.password)
+            validador.validarRegistro(state.nombre, state.email, state.password, state.rolSeleccionado)
         } else {
             validador.validarLogin(state.email, state.password)
         }

@@ -1,6 +1,11 @@
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticate, requireRole, authorizeCourseAccess } = require('../middleware/auth');
+const {
+  authenticate,
+  requireRole,
+  authorizeCourseAccess,
+  requireCourseAccessMiddleware,
+} = require('../middleware/auth');
 const { createMulterUpload, safeUnlink, cleanupUploadedFiles } = require('../utils/filePolicy');
 
 const router = express.Router();
@@ -36,6 +41,46 @@ async function getActividadWithCourse(actividadId) {
   if (!Number.isInteger(id) || id <= 0) return null;
   const [rows] = await pool.query('SELECT * FROM actividades WHERE id = ?', [id]);
   return rows[0] || null;
+}
+
+// SEC-04: Autorizar acceso antes de que Multer procese y escriba archivos en disco
+async function authorizeActividadOwnerPreUpload(req, res, next) {
+  try {
+    const actividad = await getActividadWithCourse(req.params.actividadId);
+    if (!actividad) {
+      return res.status(404).json({ error: 'Actividad no encontrada.' });
+    }
+    const access = await authorizeCourseAccess(actividad.curso_id, req.user, { requireInstructorOwner: true });
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+    req.actividad = actividad;
+    req.courseAccess = access;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function authorizeActividadSubmissionPreUpload(req, res, next) {
+  try {
+    const actividad = await getActividadWithCourse(req.params.actividadId);
+    if (!actividad) {
+      return res.status(404).json({ error: 'Actividad no encontrada.' });
+    }
+    const access = await authorizeCourseAccess(actividad.curso_id, req.user);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+    if (access.curso.estado !== 'ACTIVO') {
+      return res.status(403).json({ error: 'El curso está archivado; no admite nuevas entregas.' });
+    }
+    req.actividad = actividad;
+    req.courseAccess = access;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 router.get('/curso/:cursoId', async (req, res, next) => {
@@ -137,10 +182,14 @@ router.get('/curso/:cursoId', async (req, res, next) => {
   }
 });
 
-router.post('/curso/:cursoId', uploadAdjuntos.array('adjuntos', 10), async (req, res, next) => {
+router.post(
+  '/curso/:cursoId',
+  requireCourseAccessMiddleware('cursoId', { requireInstructorOwner: true }),
+  uploadAdjuntos.array('adjuntos', 10),
+  async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const access = await authorizeCourseAccess(req.params.cursoId, req.user, { requireInstructorOwner: true });
+    const access = req.courseAccess || await authorizeCourseAccess(req.params.cursoId, req.user, { requireInstructorOwner: true });
     if (access.error) {
       cleanupUploadedFiles('actividades', req.files);
       return res.status(access.status).json({ error: access.error });
@@ -211,15 +260,19 @@ router.post('/curso/:cursoId', uploadAdjuntos.array('adjuntos', 10), async (req,
   }
 });
 
-router.put('/:actividadId', uploadAdjuntos.array('adjuntos', 10), async (req, res, next) => {
+router.put(
+  '/:actividadId',
+  authorizeActividadOwnerPreUpload,
+  uploadAdjuntos.array('adjuntos', 10),
+  async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const actividad = await getActividadWithCourse(req.params.actividadId);
+    const actividad = req.actividad || await getActividadWithCourse(req.params.actividadId);
     if (!actividad) {
       cleanupUploadedFiles('actividades', req.files);
       return res.status(404).json({ error: 'Actividad no encontrada.' });
     }
-    const access = await authorizeCourseAccess(actividad.curso_id, req.user, { requireInstructorOwner: true });
+    const access = req.courseAccess || await authorizeCourseAccess(actividad.curso_id, req.user, { requireInstructorOwner: true });
     if (access.error) {
       cleanupUploadedFiles('actividades', req.files);
       return res.status(access.status).json({ error: access.error });
@@ -361,15 +414,20 @@ router.get('/:actividadId/entregas', async (req, res, next) => {
   }
 });
 
-router.post('/:actividadId/entrega', requireRole('APRENDIZ'), uploadEntregas.array('archivos', 10), async (req, res, next) => {
+router.post(
+  '/:actividadId/entrega',
+  requireRole('APRENDIZ'),
+  authorizeActividadSubmissionPreUpload,
+  uploadEntregas.array('archivos', 10),
+  async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const actividad = await getActividadWithCourse(req.params.actividadId);
+    const actividad = req.actividad || await getActividadWithCourse(req.params.actividadId);
     if (!actividad) {
       cleanupUploadedFiles('entregas', req.files);
       return res.status(404).json({ error: 'Actividad no encontrada.' });
     }
-    const access = await authorizeCourseAccess(actividad.curso_id, req.user);
+    const access = req.courseAccess || await authorizeCourseAccess(actividad.curso_id, req.user);
     if (access.error) {
       cleanupUploadedFiles('entregas', req.files);
       return res.status(access.status).json({ error: access.error });

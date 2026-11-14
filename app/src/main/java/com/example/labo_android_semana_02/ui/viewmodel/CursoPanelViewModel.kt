@@ -1,10 +1,15 @@
 package com.example.labo_android_semana_02.ui.viewmodel
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.labo_android_semana_02.NotificadorLocal
 import com.example.labo_android_semana_02.data.remote.FileDownloadManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import com.example.labo_android_semana_02.data.remote.MultipartHelper
 import com.example.labo_android_semana_02.domain.model.Actividad
 import com.example.labo_android_semana_02.domain.model.ArchivoAdjunto
@@ -66,6 +71,7 @@ data class CursoPanelUiState(
 
 @HiltViewModel
 class CursoPanelViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
     private val authRepository: AuthRepository,
     private val cursoRepository: CursoRepository,
@@ -101,6 +107,57 @@ class CursoPanelViewModel @Inject constructor(
             }
         }
         cargarTodo()
+        iniciarSincronizacionTiempoReal()
+    }
+
+    /**
+     * Sincronización automática en tiempo real del chat activo (cada 5 segundos) y disparo
+     * de notificaciones locales del sistema cuando llegan mensajes nuevos de otros integrantes.
+     */
+    private fun iniciarSincronizacionTiempoReal() {
+        viewModelScope.launch {
+            while (isActive) {
+                delay(5_000L)
+                val st = _uiState.value
+                if (st.cargando || st.enviandoMensajeChat) continue
+                val miId = st.usuario?.id ?: continue
+
+                foroRepository.listarMensajesChat(cursoId, TipoHiloForo.PUBLICO).onSuccess { nuevosPub ->
+                    val prevMaxId = st.mensajesChatPublico.maxOfOrNull { it.id } ?: 0
+                    val recienLlegados = nuevosPub.filter { it.id > prevMaxId && it.autorId != miId }
+                    if (nuevosPub.size != st.mensajesChatPublico.size || prevMaxId != (nuevosPub.maxOfOrNull { it.id } ?: 0)) {
+                        _uiState.update { it.copy(mensajesChatPublico = nuevosPub) }
+                    }
+                    if (prevMaxId > 0 && recienLlegados.isNotEmpty()) {
+                        val ultimo = recienLlegados.last()
+                        NotificadorLocal.mostrarNotificacion(
+                            context = appContext,
+                            titulo = "Nuevo mensaje en ${st.curso?.nombre ?: "Foro"}",
+                            contenido = "${ultimo.autorNombre}: ${ultimo.contenido.ifBlank { "Archivo adjunto" }}",
+                        )
+                    }
+                }
+
+                val filtroPriv = if (st.usuario?.rol == RolUsuario.INSTRUCTOR) st.filtroAprendizForoId else null
+                if (st.usuario?.rol == RolUsuario.APRENDIZ || filtroPriv != null) {
+                    foroRepository.listarMensajesChat(cursoId, TipoHiloForo.PRIVADO, filtroPriv).onSuccess { nuevosPriv ->
+                        val prevMaxId = st.mensajesChatPrivado.maxOfOrNull { it.id } ?: 0
+                        val recienLlegados = nuevosPriv.filter { it.id > prevMaxId && it.autorId != miId }
+                        if (nuevosPriv.size != st.mensajesChatPrivado.size || prevMaxId != (nuevosPriv.maxOfOrNull { it.id } ?: 0)) {
+                            _uiState.update { it.copy(mensajesChatPrivado = nuevosPriv) }
+                        }
+                        if (prevMaxId > 0 && recienLlegados.isNotEmpty()) {
+                            val ultimo = recienLlegados.last()
+                            NotificadorLocal.mostrarNotificacion(
+                                context = appContext,
+                                titulo = "Mensaje privado de ${ultimo.autorNombre}",
+                                contenido = ultimo.contenido.ifBlank { "Archivo adjunto" },
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun cargarTodo() {
@@ -430,14 +487,31 @@ class CursoPanelViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(enviandoMensajeChat = true, error = null) }
             val tipo = if (st.modoForoPrivado) TipoHiloForo.PRIVADO else TipoHiloForo.PUBLICO
-            foroRepository.enviarMensajeChat(
+
+            // Reintento automático en segundo plano (hasta 3 intentos) ante caídas breves de señal móvil
+            var ultimoResultado = foroRepository.enviarMensajeChat(
                 cursoId = cursoId,
                 tipo = tipo,
                 contenido = st.chatTexto,
                 enlaceUrl = urlParaValidar.ifEmpty { null },
                 aprendizObjetivoId = targetId,
                 archivos = st.chatArchivosPendientes,
-            ).fold(
+            )
+            var intento = 1
+            while (ultimoResultado.isFailure && intento < 3) {
+                delay(1_200L * intento)
+                ultimoResultado = foroRepository.enviarMensajeChat(
+                    cursoId = cursoId,
+                    tipo = tipo,
+                    contenido = st.chatTexto,
+                    enlaceUrl = urlParaValidar.ifEmpty { null },
+                    aprendizObjetivoId = targetId,
+                    archivos = st.chatArchivosPendientes,
+                )
+                intento++
+            }
+
+            ultimoResultado.fold(
                 onSuccess = { nuevo ->
                     _uiState.update { prev ->
                         if (tipo == TipoHiloForo.PRIVADO) {

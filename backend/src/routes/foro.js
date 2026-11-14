@@ -1,41 +1,44 @@
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticate, authorizeCourseAccess } = require('../middleware/auth');
+const { authenticate, authorizeCourseAccess, requireCourseAccessMiddleware } = require('../middleware/auth');
 const { createMulterUpload, cleanupUploadedFiles } = require('../utils/filePolicy');
 
 const router = express.Router();
 const uploadForo = createMulterUpload('foro');
 router.use(authenticate);
 
-let schemaChecked = false;
-async function ensureForoChatSchema() {
-  if (schemaChecked) return;
-  try {
-    const [cols] = await pool.query("SHOW COLUMNS FROM foro_mensajes LIKE 'enlace_url'");
-    if (cols.length === 0) {
-      await pool.query('ALTER TABLE foro_mensajes ADD COLUMN enlace_url VARCHAR(512) NULL AFTER contenido');
-    }
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS foro_archivos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        mensaje_id INT NOT NULL,
-        nombre_original VARCHAR(255) NOT NULL,
-        nombre_archivo VARCHAR(255) NOT NULL,
-        mime_type VARCHAR(140) NOT NULL,
-        tamano_bytes BIGINT NOT NULL,
-        created_at BIGINT NOT NULL,
-        CONSTRAINT fk_foro_archivos_mensaje
-          FOREIGN KEY (mensaje_id) REFERENCES foro_mensajes(id)
-          ON UPDATE CASCADE
-          ON DELETE CASCADE,
-        INDEX idx_foro_archivos_mensaje (mensaje_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    schemaChecked = true;
-  } catch (_err) {
-    // Si la tabla ya existe o hay concurrencia, continuar
-    schemaChecked = true;
+// PERF-06: Promesa singleton para ejecutar la verificación de esquema una única vez por proceso
+let foroSchemaPromise = null;
+function ensureForoChatSchema() {
+  if (!foroSchemaPromise) {
+    foroSchemaPromise = (async () => {
+      try {
+        const [cols] = await pool.query("SHOW COLUMNS FROM foro_mensajes LIKE 'enlace_url'");
+        if (cols.length === 0) {
+          await pool.query('ALTER TABLE foro_mensajes ADD COLUMN enlace_url VARCHAR(512) NULL AFTER contenido');
+        }
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS foro_archivos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mensaje_id INT NOT NULL,
+            nombre_original VARCHAR(255) NOT NULL,
+            nombre_archivo VARCHAR(255) NOT NULL,
+            mime_type VARCHAR(140) NOT NULL,
+            tamano_bytes BIGINT NOT NULL,
+            created_at BIGINT NOT NULL,
+            CONSTRAINT fk_foro_archivos_mensaje
+              FOREIGN KEY (mensaje_id) REFERENCES foro_mensajes(id)
+              ON UPDATE CASCADE
+              ON DELETE CASCADE,
+            INDEX idx_foro_archivos_mensaje (mensaje_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+      } catch (_err) {
+        // Si la tabla ya existe o hay concurrencia, continuar
+      }
+    })();
   }
+  return foroSchemaPromise;
 }
 
 function optionalMultipart(req, res, next) {
@@ -49,6 +52,31 @@ function optionalMultipart(req, res, next) {
 function canAccessThread(hilo, curso, user) {
   if (hilo.tipo === 'PUBLICO') return true;
   return user.id === curso.instructor_id || user.id === hilo.aprendiz_objetivo_id;
+}
+
+// SEC-04: Autorizar acceso al hilo antes de que Multer procese adjuntos
+async function authorizeHiloPreUpload(req, res, next) {
+  try {
+    await ensureForoChatSchema();
+    const hiloId = Number(req.params.hiloId);
+    const [hilos] = await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]);
+    if (hilos.length === 0) {
+      return res.status(404).json({ error: 'Hilo no encontrado.' });
+    }
+    const hilo = hilos[0];
+    const access = await authorizeCourseAccess(hilo.curso_id, req.user);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+    if (!canAccessThread(hilo, access.curso, req.user)) {
+      return res.status(403).json({ error: 'No tienes permiso para responder en este hilo privado.' });
+    }
+    req.hilo = hilo;
+    req.courseAccess = access;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 function normalizeUrl(raw) {
@@ -193,44 +221,67 @@ router.get('/curso/:cursoId/chat', async (req, res, next) => {
     if (hilos.length === 0) return res.json([]);
 
     const hiloIds = hilos.map((h) => h.id);
-    const [mensajesRows] = await pool.query(
-      `SELECT m.*, u.nombre AS autor_nombre, u.rol AS autor_rol
-       FROM foro_mensajes m
-       INNER JOIN usuarios u ON u.id = m.autor_id
-       WHERE m.hilo_id IN (?)
-       ORDER BY m.created_at ASC, m.id ASC`,
-      [hiloIds]
-    );
+
+    // PERF-05: Paginación por cursor (?beforeId=...&limit=...) con techo máximo de seguridad
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 300) : 150;
+    const beforeId = Number(req.query.beforeId);
+    const hasBeforeCursor = Number.isInteger(beforeId) && beforeId > 0;
+
+    let msgQuery = `
+      SELECT m.*, u.nombre AS autor_nombre, u.rol AS autor_rol
+      FROM foro_mensajes m
+      INNER JOIN usuarios u ON u.id = m.autor_id
+      WHERE m.hilo_id IN (?)
+    `;
+    const msgParams = [hiloIds];
+    if (hasBeforeCursor) {
+      msgQuery += ' AND m.id < ?';
+      msgParams.push(beforeId);
+    }
+    msgQuery += ' ORDER BY m.created_at DESC, m.id DESC LIMIT ?';
+    msgParams.push(limit);
+
+    const [mensajesDesc] = await pool.query(msgQuery, msgParams);
+    const mensajesRows = mensajesDesc.reverse();
 
     const enriched = await attachFilesToMessages(mensajesRows);
 
-    // Incluir mensajes iniciales de hilos heredados (creados con título/contenido)
-    const legacySeedMessages = hilos
-      .filter((h) => h.contenido && String(h.contenido).trim().length > 0 && !String(h.titulo).startsWith('__CHAT_'))
-      .map((h) => ({
-        id: -Number(h.id),
-        hilo_id: Number(h.id),
-        autor_id: Number(h.autor_id),
-        autor_nombre: h.autor_nombre,
-        autor_rol: h.autor_rol,
-        contenido: h.contenido,
-        enlace_url: null,
-        archivos: [],
-        created_at: Number(h.created_at),
-      }));
+    // Incluir mensajes iniciales de hilos heredados cuando se consulta la primera página
+    const legacySeedMessages = hasBeforeCursor
+      ? []
+      : hilos
+          .filter((h) => h.contenido && String(h.contenido).trim().length > 0 && !String(h.titulo).startsWith('__CHAT_'))
+          .map((h) => ({
+            id: -Number(h.id),
+            hilo_id: Number(h.id),
+            autor_id: Number(h.autor_id),
+            autor_nombre: h.autor_nombre,
+            autor_rol: h.autor_rol,
+            contenido: h.contenido,
+            enlace_url: null,
+            archivos: [],
+            created_at: Number(h.created_at),
+          }));
 
-    const combined = [...legacySeedMessages, ...enriched].sort((a, b) => a.created_at - b.created_at);
+    const combined = [...legacySeedMessages, ...enriched]
+      .sort((a, b) => a.created_at - b.created_at)
+      .slice(-limit);
     return res.json(combined);
   } catch (err) {
     return next(err);
   }
 });
 
-router.post('/curso/:cursoId/chat', optionalMultipart, async (req, res, next) => {
+router.post(
+  '/curso/:cursoId/chat',
+  requireCourseAccessMiddleware('cursoId'),
+  optionalMultipart,
+  async (req, res, next) => {
   const uploadedFiles = req.files || [];
   try {
     await ensureForoChatSchema();
-    const access = await authorizeCourseAccess(req.params.cursoId, req.user);
+    const access = req.courseAccess || await authorizeCourseAccess(req.params.cursoId, req.user);
     if (access.error) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(access.status).json({ error: access.error });
@@ -442,19 +493,18 @@ router.get('/:hiloId/mensajes', async (req, res, next) => {
   }
 });
 
-router.post('/:hiloId/mensajes', optionalMultipart, async (req, res, next) => {
+router.post('/:hiloId/mensajes', authorizeHiloPreUpload, optionalMultipart, async (req, res, next) => {
   const uploadedFiles = req.files || [];
   try {
     await ensureForoChatSchema();
     const hiloId = Number(req.params.hiloId);
-    const [hilos] = await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]);
-    if (hilos.length === 0) {
+    const hilo = req.hilo || ((await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]))[0][0]);
+    if (!hilo) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(404).json({ error: 'Hilo no encontrado.' });
     }
-    const hilo = hilos[0];
 
-    const access = await authorizeCourseAccess(hilo.curso_id, req.user);
+    const access = req.courseAccess || await authorizeCourseAccess(hilo.curso_id, req.user);
     if (access.error) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(access.status).json({ error: access.error });

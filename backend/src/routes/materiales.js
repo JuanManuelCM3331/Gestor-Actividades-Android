@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticate, authorizeCourseAccess } = require('../middleware/auth');
+const { authenticate, authorizeCourseAccess, requireCourseAccessMiddleware } = require('../middleware/auth');
 const { createMulterUpload, safeUnlink, cleanupUploadedFiles } = require('../utils/filePolicy');
 
 const router = express.Router();
@@ -39,9 +39,13 @@ router.get('/curso/:cursoId', async (req, res, next) => {
   }
 });
 
-router.post('/curso/:cursoId', uploadMaterial.single('archivo'), async (req, res, next) => {
+router.post(
+  '/curso/:cursoId',
+  requireCourseAccessMiddleware('cursoId', { requireInstructorOwner: true }),
+  uploadMaterial.single('archivo'),
+  async (req, res, next) => {
   try {
-    const access = await authorizeCourseAccess(req.params.cursoId, req.user, { requireInstructorOwner: true });
+    const access = req.courseAccess || await authorizeCourseAccess(req.params.cursoId, req.user, { requireInstructorOwner: true });
     if (access.error) {
       if (req.file) cleanupUploadedFiles('materiales', [req.file]);
       return res.status(access.status).json({ error: access.error });

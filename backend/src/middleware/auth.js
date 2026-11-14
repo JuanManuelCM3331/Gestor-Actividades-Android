@@ -2,6 +2,31 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../config/db');
 const { JWT_SECRET } = require('../config/env');
 
+// SEC-05: Almacén en memoria de tokens revocados (por jti o firma) con expiración automática
+const revokedTokens = new Map();
+
+function revokeToken(key, expSeconds) {
+  if (!key) return;
+  const expiresAtMs = expSeconds ? expSeconds * 1000 : Date.now() + 12 * 3600 * 1000;
+  revokedTokens.set(key, expiresAtMs);
+
+  const now = Date.now();
+  for (const [k, exp] of revokedTokens.entries()) {
+    if (now >= exp) revokedTokens.delete(k);
+  }
+}
+
+function isTokenRevoked(key) {
+  if (!key) return false;
+  const exp = revokedTokens.get(key);
+  if (!exp) return false;
+  if (Date.now() >= exp) {
+    revokedTokens.delete(key);
+    return false;
+  }
+  return true;
+}
+
 async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization || '';
@@ -11,6 +36,11 @@ async function authenticate(req, res, next) {
     const token = authHeader.slice(7).trim();
     const payload = jwt.verify(token, JWT_SECRET);
 
+    const tokenKey = payload.jti || token;
+    if (isTokenRevoked(tokenKey)) {
+      return res.status(401).json({ error: 'La sesión fue cerrada. Inicia sesión nuevamente.' });
+    }
+
     const [rows] = await pool.query(
       'SELECT id, nombre, email, rol FROM usuarios WHERE id = ?',
       [payload.sub]
@@ -19,6 +49,8 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Sesión inválida o usuario inexistente.' });
     }
     req.user = rows[0];
+    req.tokenPayload = payload;
+    req.rawToken = token;
     return next();
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido o expirado.' });
@@ -72,8 +104,38 @@ async function authorizeCourseAccess(cursoId, user, { requireInstructorOwner = f
   return { curso, isOwner: false };
 }
 
+/**
+ * SEC-04: Middleware para autorizar acceso al curso ANTES de que Multer escriba archivos en disco.
+ */
+function requireCourseAccessMiddleware(paramOrOptions = 'cursoId', maybeOptions = {}) {
+  const paramName = typeof paramOrOptions === 'string'
+    ? paramOrOptions
+    : (paramOrOptions?.paramName || 'cursoId');
+  const requireInstructorOwner = typeof paramOrOptions === 'object' && paramOrOptions !== null
+    ? Boolean(paramOrOptions.requireInstructorOwner)
+    : Boolean(maybeOptions?.requireInstructorOwner);
+
+  return async (req, res, next) => {
+    try {
+      const access = await authorizeCourseAccess(req.params[paramName], req.user, {
+        requireInstructorOwner,
+      });
+      if (access.error) {
+        return res.status(access.status).json({ error: access.error });
+      }
+      req.courseAccess = access;
+      return next();
+    } catch (err) {
+      return next(err);
+    }
+  };
+}
+
 module.exports = {
   authenticate,
   requireRole,
   authorizeCourseAccess,
+  requireCourseAccessMiddleware,
+  revokeToken,
+  isTokenRevoked,
 };

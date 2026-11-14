@@ -176,4 +176,61 @@ class CursosViewModel @Inject constructor(
     fun cerrarSesion() {
         viewModelScope.launch { authRepository.logout() }
     }
+
+    fun actualizarPerfil(nuevoNombre: String) {
+        if (nuevoNombre.trim().length < 3) {
+            _uiState.update { it.copy(error = "El nombre debe tener al menos 3 caracteres.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargando = true, error = null) }
+            authRepository.actualizarPerfil(nuevoNombre).fold(
+                onSuccess = { actualizado ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            usuario = actualizado,
+                            mensaje = "Perfil actualizado correctamente.",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(cargando = false, error = e.message) }
+                },
+            )
+        }
+    }
+
+    fun cambiarPassword(passwordActual: String, passwordNueva: String) {
+        if (passwordActual.isBlank() || passwordNueva.length < 6) {
+            _uiState.update {
+                it.copy(error = "Ingresa tu contraseña actual y una nueva de mínimo 6 caracteres.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargando = true, error = null) }
+            authRepository.cambiarPassword(passwordActual, passwordNueva).fold(
+                onSuccess = { msg ->
+                    _uiState.update { it.copy(cargando = false, mensaje = msg) }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(cargando = false, error = e.message) }
+                },
+            )
+        }
+    }
+
+    fun eliminarCuenta(password: String) {
+        if (password.isBlank()) {
+            _uiState.update { it.copy(error = "Debes confirmar tu contraseña para eliminar la cuenta.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargando = true, error = null) }
+            authRepository.eliminarCuenta(password).onFailure { e ->
+                _uiState.update { it.copy(cargando = false, error = e.message) }
+            }
+        }
+    }
 }
