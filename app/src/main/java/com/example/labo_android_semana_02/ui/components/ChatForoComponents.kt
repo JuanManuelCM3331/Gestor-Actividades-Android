@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
@@ -46,6 +47,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -870,42 +873,132 @@ fun BarraCompositorChat(
                 }
             }
 
-            // 4. Barra de herramientas multimedia (Imagen, Archivo, Audio, Grabar voz, Enlace URL)
+            // 4. Barra principal: [Menú desplegable (+)] + [Campo de texto] + [Botón Audio] + [Botón Enviar]
+            var menuAdjuntosAbierto by remember { mutableStateOf(false) }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                // Botón desplegable a la izquierda del campo de texto
+                Box {
+                    Surface(
+                        color = if (menuAdjuntosAbierto) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = CircleShape,
+                        border = BorderStroke(
+                            1.dp,
+                            if (menuAdjuntosAbierto) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                        ),
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        AppIconButton(
+                            onClick = { menuAdjuntosAbierto = true },
+                            enabled = habilitado && !enviando,
+                        ) {
+                            Icon(
+                                imageVector = if (menuAdjuntosAbierto) Icons.Default.Close else Icons.Default.Add,
+                                contentDescription = "Adjuntar contenido",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = menuAdjuntosAbierto,
+                        onDismissRequest = { menuAdjuntosAbierto = false },
+                        modifier = Modifier.background(c.superficieTarjeta),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Subir imagen", fontWeight = FontWeight.Medium) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = c.exito,
+                                )
+                            },
+                            onClick = {
+                                menuAdjuntosAbierto = false
+                                selectorImagenesLauncher.launch(arrayOf("image/*"))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Subir archivo", fontWeight = FontWeight.Medium) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.AttachFile,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            },
+                            onClick = {
+                                menuAdjuntosAbierto = false
+                                selectorArchivosLauncher.launch(arrayOf("*/*"))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Subir archivo de audio", fontWeight = FontWeight.Medium) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.AudioFile,
+                                    contentDescription = null,
+                                    tint = c.especial,
+                                )
+                            },
+                            onClick = {
+                                menuAdjuntosAbierto = false
+                                selectorAudiosLauncher.launch(arrayOf("audio/*"))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (mostrarCampoEnlace) "Ocultar enlace URL" else "Adjuntar enlace URL",
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Link,
+                                    contentDescription = null,
+                                    tint = c.informacion,
+                                )
+                            },
+                            onClick = {
+                                menuAdjuntosAbierto = false
+                                onAlternarCampoEnlace()
+                            },
+                        )
+                    }
+                }
+
+                // Campo de texto central
+                OutlinedTextField(
+                    value = texto,
+                    onValueChange = onTextoChange,
+                    enabled = habilitado && !enviando,
+                    placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    maxLines = 4,
+                    shape = RoundedCornerShape(22.dp),
+                    modifier = Modifier.weight(1f),
+                )
+
+                // Botón de audio a la derecha del campo de texto y a la izquierda del botón de enviar
+                Surface(
+                    color = if (grabandoAudio) MaterialTheme.colorScheme.errorContainer
+                    else c.especialContenedor,
+                    shape = CircleShape,
+                    border = BorderStroke(
+                        1.dp,
+                        if (grabandoAudio) MaterialTheme.colorScheme.error
+                        else c.especial.copy(alpha = 0.45f),
+                    ),
+                    modifier = Modifier.size(44.dp),
                 ) {
-                    BotonAccionMultimedia(
-                        icono = Icons.Default.Image,
-                        etiqueta = "Imagen",
-                        color = c.exito,
-                        enabled = habilitado && !enviando,
-                        onClick = { selectorImagenesLauncher.launch(arrayOf("image/*")) },
-                    )
-                    BotonAccionMultimedia(
-                        icono = Icons.Default.AttachFile,
-                        etiqueta = "Archivo",
-                        color = MaterialTheme.colorScheme.primary,
-                        enabled = habilitado && !enviando,
-                        onClick = { selectorArchivosLauncher.launch(arrayOf("*/*")) },
-                    )
-                    BotonAccionMultimedia(
-                        icono = Icons.Default.AudioFile,
-                        etiqueta = "Audio",
-                        color = c.especial,
-                        enabled = habilitado && !enviando,
-                        onClick = { selectorAudiosLauncher.launch(arrayOf("audio/*")) },
-                    )
-                    BotonAccionMultimedia(
-                        icono = if (grabandoAudio) Icons.Default.StopCircle else Icons.Default.Mic,
-                        etiqueta = if (grabandoAudio) "Parar" else "Voz",
-                        color = MaterialTheme.colorScheme.error,
-                        enabled = habilitado && !enviando,
+                    AppIconButton(
                         onClick = {
                             if (grabandoAudio) {
                                 detenerGrabacion(guardar = true)
@@ -921,38 +1014,22 @@ fun BarraCompositorChat(
                                 }
                             }
                         },
-                    )
-                    BotonAccionMultimedia(
-                        icono = Icons.Default.Link,
-                        etiqueta = "URL",
-                        color = c.informacion,
                         enabled = habilitado && !enviando,
-                        activo = mostrarCampoEnlace,
-                        onClick = onAlternarCampoEnlace,
-                    )
+                    ) {
+                        Icon(
+                            imageVector = if (grabandoAudio) Icons.Default.StopCircle else Icons.Default.Mic,
+                            contentDescription = if (grabandoAudio) "Detener grabación de audio" else "Grabar audio",
+                            tint = if (grabandoAudio) MaterialTheme.colorScheme.error else c.especial,
+                        )
+                    }
                 }
-            }
 
-            // 5. Barra principal de escritura y botón de envío directo
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = texto,
-                    onValueChange = onTextoChange,
-                    enabled = habilitado && !enviando,
-                    placeholder = { Text(placeholder) },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.weight(1f),
-                )
+                // Botón de enviar a la derecha
                 Surface(
                     color = if (puedeEnviar) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.surfaceVariant,
                     shape = CircleShape,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(46.dp),
                 ) {
                     AppIconButton(
                         onClick = onEnviar,
@@ -975,42 +1052,6 @@ fun BarraCompositorChat(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun BotonAccionMultimedia(
-    icono: androidx.compose.ui.graphics.vector.ImageVector,
-    etiqueta: String,
-    color: androidx.compose.ui.graphics.Color,
-    enabled: Boolean,
-    activo: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        color = if (activo) color.copy(alpha = 0.24f) else color.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(10.dp),
-        border = if (activo) BorderStroke(1.dp, color) else null,
-        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(
-                imageVector = icono,
-                contentDescription = etiqueta,
-                tint = if (enabled) color else color.copy(alpha = 0.4f),
-                modifier = Modifier.size(16.dp),
-            )
-            Text(
-                text = etiqueta,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (enabled) color else color.copy(alpha = 0.4f),
-            )
         }
     }
 }

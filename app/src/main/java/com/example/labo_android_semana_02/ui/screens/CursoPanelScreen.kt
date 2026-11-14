@@ -126,7 +126,7 @@ fun CursoPanelScreen(
     onMostrarError: (String) -> Unit,
     onExpulsarEstudiante: (Int) -> Unit,
     onSalirseDelCurso: () -> Unit,
-    onConvertir05A100: (Double) -> Double,
+    onExportarCalificacionesExcel: () -> Unit,
     onLimpiarFeedback: () -> Unit,
 ) {
     val esInstructor = state.usuario?.rol == RolUsuario.INSTRUCTOR
@@ -134,18 +134,20 @@ fun CursoPanelScreen(
     var dialogoActividad by remember { mutableStateOf<Pair<Boolean, Actividad?>?>(null) }
     var dialogoMaterial by remember { mutableStateOf(false) }
 
-    val pestanas = listOf("Actividades", "Material", "Foro", "Personas")
+    val pestanas = listOf("Actividades", "Material", "Foro", "Personas", "Notas")
     val iconosPestanas = listOf(
         Icons.AutoMirrored.Filled.Assignment,
         Icons.Default.FolderOpen,
         Icons.Default.Forum,
         Icons.Default.Groups,
+        Icons.Default.Grade,
     )
     val coloresPestanas = listOf(
         MaterialTheme.colorScheme.primary,
         MaterialTheme.coloresExtendidos.advertencia,
         MaterialTheme.colorScheme.tertiary,
         MaterialTheme.coloresExtendidos.especial,
+        MaterialTheme.coloresExtendidos.exito,
     )
 
     Scaffold(
@@ -231,23 +233,27 @@ fun CursoPanelScreen(
                             onClick = { pestanaActiva = idx },
                             selectedContentColor = coloresPestanas[idx],
                             unselectedContentColor = coloresPestanas[idx].copy(alpha = 0.6f),
-                            icon = {
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
                                 Icon(
                                     imageVector = iconosPestanas[idx],
                                     contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(20.dp),
                                 )
-                            },
-                            text = {
                                 Text(
                                     text = label,
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (pestanaActiva == idx) FontWeight.Bold else FontWeight.Medium,
                                 )
-                            },
-                        )
+                            }
+                        }
                     }
                 }
 
@@ -342,12 +348,15 @@ fun CursoPanelScreen(
                                     onEliminarMaterial = onEliminarMaterial,
                                     onAbrirMaterial = onAbrirMaterial,
                                 )
-                                else -> TabPersonasContenido(
+                                3 -> TabPersonasContenido(
                                     state = state,
                                     esInstructor = esInstructor,
-                                    convertir05A100 = onConvertir05A100,
                                     onExpulsarEstudiante = onExpulsarEstudiante,
                                     onSalirseDelCurso = onSalirseDelCurso,
+                                )
+                                else -> TabNotasContenido(
+                                    state = state,
+                                    onExportarExcel = onExportarCalificacionesExcel,
                                 )
                             }
                         }
@@ -497,7 +506,7 @@ private fun DialogoCrearEditarActividad(
 ) {
     var titulo by remember { mutableStateOf(actividad?.titulo.orEmpty()) }
     var descripcion by remember { mutableStateOf(actividad?.descripcion.orEmpty()) }
-    var puntajeTxt by remember { mutableStateOf(actividad?.puntajeMaximo?.toString() ?: "5.0") }
+    var esEscala100 by remember { mutableStateOf((actividad?.puntajeMaximo ?: 5.0) >= 100.0) }
     var fechaLimiteMs by remember {
         mutableLongStateOf(actividad?.fechaLimite ?: (System.currentTimeMillis() + 5L * 86_400_000L))
     }
@@ -541,14 +550,31 @@ private fun DialogoCrearEditarActividad(
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
-                    value = puntajeTxt,
-                    onValueChange = { puntajeTxt = it },
-                    label = { Text("Puntaje máximo (ej. 5.0 o 100)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = "Formato de calificación máxima:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AppFilterChip(
+                        selected = !esEscala100,
+                        onClick = { esEscala100 = false },
+                        icon = Icons.Default.Grade,
+                        label = { Text("5 puntos", maxLines = 1) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AppFilterChip(
+                        selected = esEscala100,
+                        onClick = { esEscala100 = true },
+                        icon = Icons.Default.Grade,
+                        label = { Text("100 puntos", maxLines = 1) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 AppOutlinedButton(
                     onClick = { mostrarDatePicker = true },
                     icon = Icons.Default.CalendarMonth,
@@ -590,7 +616,10 @@ private fun DialogoCrearEditarActividad(
         },
         confirmButton = {
             AppButton(
-                onClick = { onGuardar(titulo, descripcion, fechaLimiteMs, puntajeTxt, archivos) },
+                onClick = {
+                    val puntajeTxt = if (esEscala100) "100" else "5.0"
+                    onGuardar(titulo, descripcion, fechaLimiteMs, puntajeTxt, archivos)
+                },
                 icon = Icons.Default.CheckCircle,
             ) {
                 Text("Guardar")

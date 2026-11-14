@@ -25,6 +25,7 @@ import com.example.labo_android_semana_02.domain.repository.CursoRepository
 import com.example.labo_android_semana_02.domain.repository.ForoRepository
 import com.example.labo_android_semana_02.domain.repository.MaterialRepository
 import com.example.labo_android_semana_02.domain.usecase.CalcularCalificacionCursoUseCase
+import com.example.labo_android_semana_02.domain.usecase.GenerarExcelCalificacionesUseCase
 import com.example.labo_android_semana_02.domain.usecase.ValidarFormulariosUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -78,6 +79,7 @@ class CursoPanelViewModel @Inject constructor(
     val cursoId: Int = checkNotNull(savedStateHandle["cursoId"])
     private val validador = ValidarFormulariosUseCase()
     private val calculadorNotas = CalcularCalificacionCursoUseCase()
+    private val generadorExcel = GenerarExcelCalificacionesUseCase()
 
     private val _uiState = MutableStateFlow(CursoPanelUiState(cursoId = cursoId))
     val uiState: StateFlow<CursoPanelUiState> = _uiState.asStateFlow()
@@ -136,8 +138,10 @@ class CursoPanelViewModel @Inject constructor(
             var listaCalifs: List<ResumenCalificacionEstudiante> = _uiState.value.calificacionesCurso
             if (rol == RolUsuario.APRENDIZ) {
                 cursoRepository.obtenerMiCalificacion(cursoId).onSuccess { miCalif = it }
-            } else if (rol == RolUsuario.INSTRUCTOR) {
-                cursoRepository.obtenerCalificacionesCurso(cursoId).onSuccess { listaCalifs = it }
+            }
+            cursoRepository.obtenerCalificacionesCurso(cursoId).onSuccess { listaCalifs = it }
+            if (listaCalifs.isEmpty() && miCalif != null) {
+                listaCalifs = listOf(miCalif!!)
             }
 
             val primerError = listOf(cursoRes, actsRes, matsRes, persRes, chatPubRes, chatPrivRes)
@@ -527,6 +531,50 @@ class CursoPanelViewModel @Inject constructor(
                     onSalido()
                 },
                 onFailure = { e -> _uiState.update { it.copy(cargando = false, error = e.message) } },
+            )
+        }
+    }
+
+    fun exportarCalificacionesExcel() {
+        val st = _uiState.value
+        val calificaciones = if (st.calificacionesCurso.isNotEmpty()) {
+            st.calificacionesCurso
+        } else {
+            listOfNotNull(st.miCalificacion)
+        }
+        if (calificaciones.isEmpty()) {
+            _uiState.update { it.copy(error = "No hay calificaciones registradas para exportar.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(procesandoArchivo = true, error = null) }
+            val cursoNombre = st.curso?.nombre ?: "Curso_$cursoId"
+            val instructorNombre = st.curso?.instructorNombre ?: st.personas?.instructor?.nombre ?: "Instructor"
+            val bytes = generadorExcel(
+                cursoNombre = cursoNombre,
+                instructorNombre = instructorNombre,
+                actividades = st.actividades,
+                calificaciones = calificaciones,
+            )
+            val nombreLimpio = cursoNombre.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40)
+            val nombreArchivo = "Calificaciones_${nombreLimpio}.xlsx"
+            fileDownloadManager.guardarYCompartirExcel(bytes, nombreArchivo).fold(
+                onSuccess = { guardado ->
+                    _uiState.update {
+                        it.copy(
+                            procesandoArchivo = false,
+                            mensaje = "Excel exportado en Descargas: $guardado",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            procesandoArchivo = false,
+                            error = "Error al exportar Excel: ${e.message}",
+                        )
+                    }
+                },
             )
         }
     }

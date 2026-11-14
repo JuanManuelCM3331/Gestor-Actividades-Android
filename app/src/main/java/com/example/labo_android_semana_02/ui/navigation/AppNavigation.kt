@@ -134,7 +134,7 @@ fun AppNavigation(
                         onSalirseDelCurso = {
                             vm.salirseDelCurso { navController.popBackStack() }
                         },
-                        onConvertir05A100 = vm::convertir05A100,
+                        onExportarCalificacionesExcel = vm::exportarCalificacionesExcel,
                         onLimpiarFeedback = vm::limpiarFeedback,
                     )
                 }

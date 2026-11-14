@@ -94,7 +94,7 @@ interface CursoApi {
     @GET("api/cursos/{cursoId}/calificaciones")
     suspend fun obtenerMiCalificacion(@Path("cursoId") cursoId: Int): ResumenCalificacionEstudianteDto
 
-    @GET("api/cursos/{cursoId}/calificaciones")
+    @GET("api/cursos/{cursoId}/calificaciones?tabla=1")
     suspend fun obtenerCalificacionesCurso(@Path("cursoId") cursoId: Int): List<ResumenCalificacionEstudianteDto>
 }
 
