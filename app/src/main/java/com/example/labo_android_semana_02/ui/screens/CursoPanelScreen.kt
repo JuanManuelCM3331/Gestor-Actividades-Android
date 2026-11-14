@@ -1,5 +1,11 @@
 package com.example.labo_android_semana_02.ui.screens
 
+import com.example.labo_android_semana_02.ui.components.AppButton
+import com.example.labo_android_semana_02.ui.components.AppFilterChip
+import com.example.labo_android_semana_02.ui.components.AppIconButton
+import com.example.labo_android_semana_02.ui.components.AppOutlinedButton
+import com.example.labo_android_semana_02.ui.components.AppTextButton
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,36 +27,56 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.foundation.background
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.TopAppBarDefaults
+import com.example.labo_android_semana_02.ui.components.IconoTintado
+import com.example.labo_android_semana_02.ui.components.colorParaTipoArchivo
+import com.example.labo_android_semana_02.ui.theme.coloresExtendidos
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -103,12 +129,28 @@ fun CursoPanelScreen(
     var dialogoForo by remember { mutableStateOf(false) }
 
     val pestanas = listOf("Actividades", "Material", "Foro", "Personas")
+    val iconosPestanas = listOf(
+        Icons.AutoMirrored.Filled.Assignment,
+        Icons.Default.FolderOpen,
+        Icons.Default.Forum,
+        Icons.Default.Groups,
+    )
+    val coloresPestanas = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.coloresExtendidos.advertencia,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.coloresExtendidos.especial,
+    )
 
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                ),
                 navigationIcon = {
-                    IconButton(onClick = onVolver) {
+                    AppIconButton(onClick = onVolver) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
@@ -116,6 +158,7 @@ fun CursoPanelScreen(
                     Column {
                         Text(
                             text = state.curso?.nombre ?: "Panel del curso",
+                            style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -131,8 +174,12 @@ fun CursoPanelScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefrescar) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
+                    AppIconButton(onClick = onRefrescar) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Actualizar",
+                            tint = MaterialTheme.coloresExtendidos.informacion,
+                        )
                     }
                 },
             )
@@ -150,14 +197,41 @@ fun CursoPanelScreen(
                     .fillMaxSize(),
             ) {
                 if (state.cargando || state.procesandoArchivo) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primaryContainer,
+                    )
                 }
 
-                TabRow(selectedTabIndex = pestanaActiva) {
+                TabRow(
+                    selectedTabIndex = pestanaActiva,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    indicator = { posiciones ->
+                        Box(
+                            modifier = Modifier
+                                .tabIndicatorOffset(posiciones[pestanaActiva])
+                                .height(3.dp)
+                                .background(
+                                    color = coloresPestanas[pestanaActiva],
+                                    shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp),
+                                ),
+                        )
+                    },
+                ) {
                     pestanas.forEachIndexed { idx, label ->
                         Tab(
                             selected = pestanaActiva == idx,
                             onClick = { pestanaActiva = idx },
+                            selectedContentColor = coloresPestanas[idx],
+                            unselectedContentColor = coloresPestanas[idx].copy(alpha = 0.6f),
+                            icon = {
+                                Icon(
+                                    imageVector = iconosPestanas[idx],
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            },
                             text = {
                                 Text(
                                     text = label,
@@ -293,23 +367,43 @@ private fun TarjetaCodigoAccesoInstructor(
     onToggleActivo: (Boolean) -> Unit,
     onRegenerar: () -> Unit,
 ) {
+    val acento = if (activo) MaterialTheme.coloresExtendidos.exito else MaterialTheme.coloresExtendidos.neutro
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    Text("Código de acceso al curso", style = MaterialTheme.typography.labelMedium)
-                    Text(codigo, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconoTintado(icono = Icons.Default.Key, color = acento, tamano = 44.dp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            "Código de acceso al curso",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            codigo,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (activo) "Activo" else "Inactivo", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        if (activo) "Activo" else "Inactivo",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = acento,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Switch(
                         checked = activo,
                         onCheckedChange = onToggleActivo,
@@ -317,7 +411,11 @@ private fun TarjetaCodigoAccesoInstructor(
                     )
                 }
             }
-            OutlinedButton(onClick = onRegenerar, modifier = Modifier.fillMaxWidth()) {
+            AppOutlinedButton(
+                onClick = onRegenerar,
+                icon = Icons.Default.Refresh,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("Regenerar código de acceso")
             }
         }
@@ -328,27 +426,40 @@ private fun TarjetaCodigoAccesoInstructor(
 private fun TarjetaResumenNotasAprendiz(state: CursoPanelUiState) {
     val res = state.miCalificacion ?: return
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Tu promedio actual del curso",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconoTintado(
+                icono = Icons.Default.Grade,
+                color = MaterialTheme.coloresExtendidos.advertencia,
+                tamano = 48.dp,
+                circular = true,
             )
-            Text(
-                text = "${UiFormatters.formatearNota(res.nota05)} / 5.00   •   ${UiFormatters.formatearNota(res.nota0100)} / 100",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Text(
-                text = "Evaluables: ${res.actividadesEvaluables} • Calificadas: ${res.actividadesCalificadas} • Exentas excluidas: ${res.actividadesExentas}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Tu promedio actual del curso",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = "${UiFormatters.formatearNota(res.nota05)} / 5.00   •   ${UiFormatters.formatearNota(res.nota0100)} / 100",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = "Evaluables: ${res.actividadesEvaluables} • Calificadas: ${res.actividadesCalificadas} • Exentas excluidas: ${res.actividadesExentas}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
     }
 }
@@ -379,6 +490,13 @@ private fun DialogoCrearEditarActividad(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = if (actividad == null) Icons.Default.AddCircle else Icons.Default.Edit,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
         title = { Text(if (actividad == null) "Nueva actividad" else "Editar actividad") },
         text = {
             Column(
@@ -408,14 +526,16 @@ private fun DialogoCrearEditarActividad(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedButton(
+                AppOutlinedButton(
                     onClick = { mostrarDatePicker = true },
+                    icon = Icons.Default.CalendarMonth,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Fecha límite: ${UiFormatters.formatearFechaCorta(fechaLimiteMs)} (23:59)")
                 }
-                OutlinedButton(
+                AppOutlinedButton(
                     onClick = { launcher.launch(arrayOf("*/*")) },
+                    icon = Icons.Default.AttachFile,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Adjuntar archivos (máx. 20 MB c/u)")
@@ -426,25 +546,35 @@ private fun DialogoCrearEditarActividad(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = colorParaTipoArchivo(file.nombre),
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "${file.nombre} (${UiFormatters.formatearTamano(file.tamanoBytes)})",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = { archivos = archivos.filterIndexed { i, _ -> i != idx } }) {
-                            Text("Quitar")
+                        AppTextButton(onClick = { archivos = archivos.filterIndexed { i, _ -> i != idx } }) {
+                            Text("Quitar", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardar(titulo, descripcion, fechaLimiteMs, puntajeTxt, archivos) }) {
+            AppButton(
+                onClick = { onGuardar(titulo, descripcion, fechaLimiteMs, puntajeTxt, archivos) },
+                icon = Icons.Default.CheckCircle,
+            ) {
                 Text("Guardar")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            AppTextButton(onClick = onDismiss) { Text("Cancelar") }
         },
     )
 
@@ -453,7 +583,7 @@ private fun DialogoCrearEditarActividad(
         DatePickerDialog(
             onDismissRequest = { mostrarDatePicker = false },
             confirmButton = {
-                TextButton(
+                AppTextButton(
                     onClick = {
                         pickerState.selectedDateMillis?.let { utcMillis ->
                             val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
@@ -476,7 +606,7 @@ private fun DialogoCrearEditarActividad(
                 ) { Text("Aceptar") }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") }
+                AppTextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") }
             },
         ) {
             DatePicker(state = pickerState)
@@ -504,18 +634,23 @@ private fun DialogoCrearMaterial(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.coloresExtendidos.advertencia)
+        },
         title = { Text("Subir material de apoyo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
+                    AppFilterChip(
                         selected = !esEnlace,
                         onClick = { esEnlace = false },
+                        icon = Icons.Default.AttachFile,
                         label = { Text("Archivo") },
                     )
-                    FilterChip(
+                    AppFilterChip(
                         selected = esEnlace,
                         onClick = { esEnlace = true },
+                        icon = Icons.Default.Link,
                         label = { Text("Enlace URL") },
                     )
                 }
@@ -541,8 +676,9 @@ private fun DialogoCrearMaterial(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    OutlinedButton(
+                    AppOutlinedButton(
                         onClick = { launcher.launch(arrayOf("*/*")) },
+                        icon = Icons.Default.AttachFile,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(archivo?.let { "${it.nombre} (${UiFormatters.formatearTamano(it.tamanoBytes)})" }
@@ -552,12 +688,15 @@ private fun DialogoCrearMaterial(
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardar(titulo, descripcion, esEnlace, enlaceUrl, archivo) }) {
+            AppButton(
+                onClick = { onGuardar(titulo, descripcion, esEnlace, enlaceUrl, archivo) },
+                icon = Icons.AutoMirrored.Filled.Send,
+            ) {
                 Text("Publicar")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            AppTextButton(onClick = onDismiss) { Text("Cancelar") }
         },
     )
 }
@@ -578,6 +717,9 @@ private fun DialogoCrearHiloForo(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(Icons.Default.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+        },
         title = { Text("Publicar en foro") },
         text = {
             Column(
@@ -585,14 +727,16 @@ private fun DialogoCrearHiloForo(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
+                    AppFilterChip(
                         selected = !privado,
                         onClick = { privado = false },
+                        icon = Icons.Default.Public,
                         label = { Text("Público") },
                     )
-                    FilterChip(
+                    AppFilterChip(
                         selected = privado,
                         onClick = { privado = true },
+                        icon = Icons.Default.Lock,
                         label = { Text("Privado 1:1") },
                     )
                 }
@@ -600,7 +744,7 @@ private fun DialogoCrearHiloForo(
                     Text("Aprendiz destinatario:", style = MaterialTheme.typography.labelMedium)
                     WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
                         aprendices.forEach { est ->
-                            FilterChip(
+                            AppFilterChip(
                                 selected = aprendizDestinoId == est.id,
                                 onClick = { aprendizDestinoId = est.id },
                                 label = { Text(est.nombre) },
@@ -625,19 +769,22 @@ private fun DialogoCrearHiloForo(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                onCrear(
-                    titulo,
-                    contenido,
-                    privado,
-                    if (privado && esInstructor) aprendizDestinoId else null,
-                )
-            }) {
+            AppButton(
+                onClick = {
+                    onCrear(
+                        titulo,
+                        contenido,
+                        privado,
+                        if (privado && esInstructor) aprendizDestinoId else null,
+                    )
+                },
+                icon = Icons.AutoMirrored.Filled.Send,
+            ) {
                 Text("Publicar")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            AppTextButton(onClick = onDismiss) { Text("Cancelar") }
         },
     )
 }

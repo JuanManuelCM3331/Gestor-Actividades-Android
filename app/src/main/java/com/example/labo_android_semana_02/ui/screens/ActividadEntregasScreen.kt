@@ -1,5 +1,12 @@
 package com.example.labo_android_semana_02.ui.screens
 
+import com.example.labo_android_semana_02.ui.components.AppAssistChip
+import com.example.labo_android_semana_02.ui.components.AppButton
+import com.example.labo_android_semana_02.ui.components.AppIconButton
+import com.example.labo_android_semana_02.ui.components.AppOutlinedButton
+import com.example.labo_android_semana_02.ui.components.AppTextButton
+
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,28 +26,34 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Grade
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -46,11 +61,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.labo_android_semana_02.domain.model.ArchivoAdjunto
 import com.example.labo_android_semana_02.domain.model.EntregaInstructorItem
+import com.example.labo_android_semana_02.domain.model.EstadoEntrega
 import com.example.labo_android_semana_02.ui.components.BannerMensaje
 import com.example.labo_android_semana_02.ui.components.EstadoEntregaChip
 import com.example.labo_android_semana_02.ui.components.EstadoVacioTarjeta
+import com.example.labo_android_semana_02.ui.components.IconoTintado
 import com.example.labo_android_semana_02.ui.components.UiFormatters
 import com.example.labo_android_semana_02.ui.components.WrapRow
+import com.example.labo_android_semana_02.ui.theme.coloresExtendidos
 import com.example.labo_android_semana_02.ui.viewmodel.ActividadEntregasUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,15 +86,28 @@ fun ActividadEntregasScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                ),
                 navigationIcon = {
-                    IconButton(onClick = onVolver) {
+                    AppIconButton(onClick = onVolver) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
-                title = { Text(state.actividad?.titulo ?: "Entregas de aprendices") },
+                title = {
+                    Text(
+                        text = state.actividad?.titulo ?: "Entregas de aprendices",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
                 actions = {
-                    IconButton(onClick = onRefrescar) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
+                    AppIconButton(onClick = onRefrescar) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Actualizar",
+                            tint = MaterialTheme.coloresExtendidos.informacion,
+                        )
                     }
                 },
             )
@@ -94,7 +125,11 @@ fun ActividadEntregasScreen(
                     .fillMaxSize(),
             ) {
                 if (state.cargando) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primaryContainer,
+                    )
                 }
 
                 LazyColumn(
@@ -110,17 +145,36 @@ fun ActividadEntregasScreen(
                         }
 
                         state.actividad?.let { act ->
-                            Text(
-                                text = "Puntaje máximo: ${UiFormatters.formatearNota(act.puntajeMaximo)} • Límite: ${UiFormatters.formatearFechaHora(act.fechaLimite)}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Grade,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.coloresExtendidos.advertencia,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(
+                                    text = " Máx. ${UiFormatters.formatearNota(act.puntajeMaximo)}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.coloresExtendidos.informacion,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text(
+                                    text = " ${UiFormatters.formatearFechaHora(act.fechaLimite)}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
                         }
                     }
 
                     if (state.entregas.isEmpty() && !state.cargando) {
                         item {
                             EstadoVacioTarjeta(
+                                icono = Icons.Default.Inbox,
                                 titulo = "No hay aprendices inscritos",
                                 descripcion = "Cuando los aprendices se unan al curso verás aquí sus entregas y estado.",
                             )
@@ -128,7 +182,18 @@ fun ActividadEntregasScreen(
                     }
 
                     items(state.entregas, key = { it.aprendizId }) { item ->
-                        Card(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                        val acento = when (item.estado) {
+                            EstadoEntrega.CALIFICADA -> MaterialTheme.coloresExtendidos.exito
+                            EstadoEntrega.ENTREGADA -> MaterialTheme.coloresExtendidos.informacion
+                            EstadoEntrega.TARDIA -> MaterialTheme.colorScheme.error
+                            EstadoEntrega.EXENTA -> MaterialTheme.coloresExtendidos.especial
+                            EstadoEntrega.PENDIENTE -> MaterialTheme.coloresExtendidos.advertencia
+                        }
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, acento.copy(alpha = 0.30f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -137,9 +202,15 @@ fun ActividadEntregasScreen(
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    IconoTintado(
+                                        icono = Icons.Default.Person,
+                                        color = acento,
+                                        tamano = 42.dp,
+                                        circular = true,
+                                    )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(item.aprendizNombre, fontWeight = FontWeight.Bold)
                                         Text(
@@ -167,8 +238,9 @@ fun ActividadEntregasScreen(
                                         verticalSpacing = 6.dp,
                                     ) {
                                         item.archivos.forEach { arch ->
-                                            AssistChip(
+                                            AppAssistChip(
                                                 onClick = { onAbrirArchivo(arch) },
+                                                icon = Icons.Default.AttachFile,
                                                 label = {
                                                     Text("${arch.nombreOriginal} (${UiFormatters.formatearTamano(arch.tamanoBytes)})")
                                                 },
@@ -178,29 +250,54 @@ fun ActividadEntregasScreen(
                                 }
 
                                 if (item.nota != null) {
-                                    Text(
-                                        text = "Nota asignada: ${UiFormatters.formatearNota(item.nota)} / ${UiFormatters.formatearNota(state.actividad?.puntajeMaximo)}",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Grade,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.coloresExtendidos.exito,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Text(
+                                            text = " Nota asignada: ${UiFormatters.formatearNota(item.nota)} / ${UiFormatters.formatearNota(state.actividad?.puntajeMaximo)}",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.coloresExtendidos.exito,
+                                        )
+                                    }
                                 } else if (item.exenta) {
-                                    Text(
-                                        text = "Exenta (entregada fuera del curso; excluida del promedio)",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.secondary,
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.RemoveCircleOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.coloresExtendidos.especial,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Text(
+                                            text = " Exenta (excluida del promedio)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.coloresExtendidos.especial,
+                                        )
+                                    }
                                 }
 
                                 if (!item.retroalimentacion.isNullOrBlank()) {
-                                    Text(
-                                        text = "Retroalimentación: ${item.retroalimentacion}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
+                                    Row(verticalAlignment = Alignment.Top) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Comment,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                        Text(
+                                            text = " ${item.retroalimentacion}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
                                 }
 
-                                OutlinedButton(
+                                AppOutlinedButton(
                                     onClick = { entregaACalificar = item },
+                                    icon = if (item.nota != null || item.exenta) Icons.Default.Edit else Icons.Default.CheckCircle,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(if (item.nota != null || item.exenta) "Editar calificación" else "Calificar / Marcar exenta")
@@ -241,11 +338,18 @@ private fun DialogoCalificarEntrega(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(Icons.Default.Grade, contentDescription = null, tint = MaterialTheme.coloresExtendidos.advertencia)
+        },
         title = { Text("Calificar a ${item.aprendizNombre}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = exenta, onCheckedChange = { exenta = it })
+                    Checkbox(
+                        checked = exenta,
+                        onCheckedChange = { exenta = it },
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.coloresExtendidos.especial),
+                    )
                     Text(
                         text = "Exenta (entregada fuera del curso)",
                         style = MaterialTheme.typography.bodySmall,
@@ -271,12 +375,12 @@ private fun DialogoCalificarEntrega(
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardar(notaTexto, retroalimentacion, exenta) }) {
+            AppButton(onClick = { onGuardar(notaTexto, retroalimentacion, exenta) }, icon = Icons.Default.CheckCircle) {
                 Text("Guardar calificación")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            AppTextButton(onClick = onDismiss) { Text("Cancelar") }
         },
     )
 }
