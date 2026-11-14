@@ -87,12 +87,11 @@ import com.example.labo_android_semana_02.domain.model.Actividad
 import com.example.labo_android_semana_02.domain.model.ArchivoAdjunto
 import com.example.labo_android_semana_02.domain.model.ArchivoLocal
 import com.example.labo_android_semana_02.domain.model.MaterialApoyo
-import com.example.labo_android_semana_02.domain.model.PersonaCurso
 import com.example.labo_android_semana_02.domain.model.RolUsuario
 import com.example.labo_android_semana_02.ui.components.BannerMensaje
 import com.example.labo_android_semana_02.ui.components.UiFormatters
-import com.example.labo_android_semana_02.ui.components.WrapRow
 import com.example.labo_android_semana_02.ui.viewmodel.CursoPanelUiState
+import java.io.File
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -115,8 +114,16 @@ fun CursoPanelScreen(
     onAbrirMaterial: (MaterialApoyo) -> Unit,
     onCambiarModoForo: (Boolean) -> Unit,
     onCambiarFiltroAprendizForo: (Int?) -> Unit,
-    onCrearHiloForo: (String, String, Boolean, Int?) -> Unit,
-    onAbrirHiloForo: (Int) -> Unit,
+    onChatTextoChange: (String) -> Unit,
+    onChatEnlaceChange: (String) -> Unit,
+    onAlternarCampoEnlaceChat: () -> Unit,
+    onAgregarArchivoChatUri: (Uri) -> Unit,
+    onAgregarAudioGrabadoChat: (File) -> Unit,
+    onQuitarArchivoChat: (Int) -> Unit,
+    onEnviarMensajeChat: () -> Unit,
+    onAbrirEnlaceExterno: (String) -> Unit,
+    onDescargarArchivoEnCache: suspend (ArchivoAdjunto) -> Result<File>,
+    onMostrarError: (String) -> Unit,
     onExpulsarEstudiante: (Int) -> Unit,
     onSalirseDelCurso: () -> Unit,
     onConvertir05A100: (Double) -> Double,
@@ -126,7 +133,6 @@ fun CursoPanelScreen(
     var pestanaActiva by remember { mutableIntStateOf(0) }
     var dialogoActividad by remember { mutableStateOf<Pair<Boolean, Actividad?>?>(null) }
     var dialogoMaterial by remember { mutableStateOf(false) }
-    var dialogoForo by remember { mutableStateOf(false) }
 
     val pestanas = listOf("Actividades", "Material", "Foro", "Personas")
     val iconosPestanas = listOf(
@@ -245,78 +251,109 @@ fun CursoPanelScreen(
                     }
                 }
 
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    item {
-                        if (state.error != null) {
-                            BannerMensaje(
-                                texto = state.error,
-                                esError = true,
-                                onDismiss = onLimpiarFeedback,
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
-                        } else if (state.mensaje != null) {
-                            BannerMensaje(
-                                texto = state.mensaje,
-                                esError = false,
-                                onDismiss = onLimpiarFeedback,
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
-                        }
-
-                        if (esInstructor && state.curso != null) {
-                            TarjetaCodigoAccesoInstructor(
-                                codigo = state.curso.codigoAcceso ?: "—",
-                                activo = state.curso.codigoActivo,
-                                onToggleActivo = onCambiarEstadoCodigo,
-                                onRegenerar = onRegenerarCodigo,
-                            )
-                        } else if (!esInstructor && state.miCalificacion != null) {
-                            TarjetaResumenNotasAprendiz(state = state)
-                        }
+                if (pestanaActiva == 2) {
+                    if (state.error != null) {
+                        BannerMensaje(
+                            texto = state.error,
+                            esError = true,
+                            onDismiss = onLimpiarFeedback,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                    } else if (state.mensaje != null) {
+                        BannerMensaje(
+                            texto = state.mensaje,
+                            esError = false,
+                            onDismiss = onLimpiarFeedback,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
                     }
 
-                    item {
-                        when (pestanaActiva) {
-                            0 -> TabActividadesContenido(
-                                state = state,
-                                esInstructor = esInstructor,
-                                onNuevaActividad = { dialogoActividad = true to null },
-                                onEditarActividad = { act -> dialogoActividad = true to act },
-                                onEliminarActividad = onEliminarActividad,
-                                onAbrirEntregasInstructor = onAbrirEntregasInstructor,
-                                onAbrirEntregaAprendiz = onAbrirEntregaAprendiz,
-                                onAbrirAdjunto = onAbrirAdjunto,
-                            )
-                            1 -> TabMaterialContenido(
-                                state = state,
-                                esInstructor = esInstructor,
-                                onNuevoMaterial = { dialogoMaterial = true },
-                                onEliminarMaterial = onEliminarMaterial,
-                                onAbrirMaterial = onAbrirMaterial,
-                            )
-                            2 -> TabForoContenido(
-                                state = state,
-                                esInstructor = esInstructor,
-                                onCambiarModoForo = onCambiarModoForo,
-                                onCambiarFiltroAprendiz = onCambiarFiltroAprendizForo,
-                                onNuevoHilo = { dialogoForo = true },
-                                onAbrirHilo = onAbrirHiloForo,
-                            )
-                            else -> TabPersonasContenido(
-                                state = state,
-                                esInstructor = esInstructor,
-                                convertir05A100 = onConvertir05A100,
-                                onExpulsarEstudiante = onExpulsarEstudiante,
-                                onSalirseDelCurso = onSalirseDelCurso,
-                            )
-                        }
-                    }
+                    TabForoContenido(
+                        state = state,
+                        esInstructor = esInstructor,
+                        onCambiarModoForo = onCambiarModoForo,
+                        onCambiarFiltroAprendiz = onCambiarFiltroAprendizForo,
+                        onChatTextoChange = onChatTextoChange,
+                        onChatEnlaceChange = onChatEnlaceChange,
+                        onAlternarCampoEnlaceChat = onAlternarCampoEnlaceChat,
+                        onAgregarArchivoChatUri = onAgregarArchivoChatUri,
+                        onAgregarAudioGrabadoChat = onAgregarAudioGrabadoChat,
+                        onQuitarArchivoChat = onQuitarArchivoChat,
+                        onEnviarMensajeChat = onEnviarMensajeChat,
+                        onAbrirAdjunto = onAbrirAdjunto,
+                        onAbrirEnlace = onAbrirEnlaceExterno,
+                        onDescargarEnCache = onDescargarArchivoEnCache,
+                        onMostrarError = onMostrarError,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    ) {
+                        item {
+                            if (state.error != null) {
+                                BannerMensaje(
+                                    texto = state.error,
+                                    esError = true,
+                                    onDismiss = onLimpiarFeedback,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            } else if (state.mensaje != null) {
+                                BannerMensaje(
+                                    texto = state.mensaje,
+                                    esError = false,
+                                    onDismiss = onLimpiarFeedback,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            }
 
-                    item { Spacer(modifier = Modifier.height(24.dp)) }
+                            if (esInstructor && state.curso != null) {
+                                TarjetaCodigoAccesoInstructor(
+                                    codigo = state.curso.codigoAcceso ?: "—",
+                                    activo = state.curso.codigoActivo,
+                                    onToggleActivo = onCambiarEstadoCodigo,
+                                    onRegenerar = onRegenerarCodigo,
+                                )
+                            } else if (!esInstructor && state.miCalificacion != null) {
+                                TarjetaResumenNotasAprendiz(state = state)
+                            }
+                        }
+
+                        item {
+                            when (pestanaActiva) {
+                                0 -> TabActividadesContenido(
+                                    state = state,
+                                    esInstructor = esInstructor,
+                                    onNuevaActividad = { dialogoActividad = true to null },
+                                    onEditarActividad = { act -> dialogoActividad = true to act },
+                                    onEliminarActividad = onEliminarActividad,
+                                    onAbrirEntregasInstructor = onAbrirEntregasInstructor,
+                                    onAbrirEntregaAprendiz = onAbrirEntregaAprendiz,
+                                    onAbrirAdjunto = onAbrirAdjunto,
+                                )
+                                1 -> TabMaterialContenido(
+                                    state = state,
+                                    esInstructor = esInstructor,
+                                    onNuevoMaterial = { dialogoMaterial = true },
+                                    onEliminarMaterial = onEliminarMaterial,
+                                    onAbrirMaterial = onAbrirMaterial,
+                                )
+                                else -> TabPersonasContenido(
+                                    state = state,
+                                    esInstructor = esInstructor,
+                                    convertir05A100 = onConvertir05A100,
+                                    onExpulsarEstudiante = onExpulsarEstudiante,
+                                    onSalirseDelCurso = onSalirseDelCurso,
+                                )
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                    }
                 }
             }
         }
@@ -341,20 +378,6 @@ fun CursoPanelScreen(
             onGuardar = { titulo, desc, esEnlace, url, archivo ->
                 onCrearMaterial(titulo, desc, esEnlace, url, archivo)
                 dialogoMaterial = false
-            },
-        )
-    }
-
-    if (dialogoForo) {
-        DialogoCrearHiloForo(
-            privadoPorDefecto = state.modoForoPrivado,
-            esInstructor = esInstructor,
-            aprendices = state.personas?.aprendices.orEmpty(),
-            aprendizInicialId = state.filtroAprendizForoId,
-            onDismiss = { dialogoForo = false },
-            onCrear = { titulo, contenido, privado, targetId ->
-                onCrearHiloForo(titulo, contenido, privado, targetId)
-                dialogoForo = false
             },
         )
     }
@@ -701,90 +724,3 @@ private fun DialogoCrearMaterial(
     )
 }
 
-@Composable
-private fun DialogoCrearHiloForo(
-    privadoPorDefecto: Boolean,
-    esInstructor: Boolean,
-    aprendices: List<PersonaCurso>,
-    aprendizInicialId: Int?,
-    onDismiss: () -> Unit,
-    onCrear: (String, String, Boolean, Int?) -> Unit,
-) {
-    var privado by remember { mutableStateOf(privadoPorDefecto) }
-    var titulo by remember { mutableStateOf("") }
-    var contenido by remember { mutableStateOf("") }
-    var aprendizDestinoId by remember { mutableStateOf(aprendizInicialId ?: aprendices.firstOrNull()?.id) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(Icons.Default.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
-        },
-        title = { Text("Publicar en foro") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppFilterChip(
-                        selected = !privado,
-                        onClick = { privado = false },
-                        icon = Icons.Default.Public,
-                        label = { Text("Público") },
-                    )
-                    AppFilterChip(
-                        selected = privado,
-                        onClick = { privado = true },
-                        icon = Icons.Default.Lock,
-                        label = { Text("Privado 1:1") },
-                    )
-                }
-                if (privado && esInstructor) {
-                    Text("Aprendiz destinatario:", style = MaterialTheme.typography.labelMedium)
-                    WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
-                        aprendices.forEach { est ->
-                            AppFilterChip(
-                                selected = aprendizDestinoId == est.id,
-                                onClick = { aprendizDestinoId = est.id },
-                                label = { Text(est.nombre) },
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = titulo,
-                    onValueChange = { titulo = it },
-                    label = { Text("Asunto / título") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = contenido,
-                    onValueChange = { contenido = it },
-                    label = { Text("Mensaje") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            AppButton(
-                onClick = {
-                    onCrear(
-                        titulo,
-                        contenido,
-                        privado,
-                        if (privado && esInstructor) aprendizDestinoId else null,
-                    )
-                },
-                icon = Icons.AutoMirrored.Filled.Send,
-            ) {
-                Text("Publicar")
-            }
-        },
-        dismissButton = {
-            AppTextButton(onClick = onDismiss) { Text("Cancelar") }
-        },
-    )
-}

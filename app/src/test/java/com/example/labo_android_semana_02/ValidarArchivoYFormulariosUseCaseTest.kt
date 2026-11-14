@@ -30,6 +30,12 @@ class ValidarArchivoYFormulariosUseCaseTest {
 
         val vacio = ArchivoLocal("content://4", "notas.txt", "text/plain", 0L)
         assertFalse(validarArchivo(vacio).esValido)
+
+        val audioGrabado = ArchivoLocal("file:///cache/nota_voz_123.m4a", "nota_voz_123.m4a", "audio/mp4", 48_000L)
+        assertTrue(validarArchivo(audioGrabado).esValido)
+
+        val audioOgg = ArchivoLocal("content://5", "mensaje.ogg", "audio/ogg", 64_000L)
+        assertTrue(validarArchivo(audioOgg).esValido)
     }
 
     @Test
@@ -62,5 +68,47 @@ class ValidarArchivoYFormulariosUseCaseTest {
             aprendizObjetivoId = null,
         )
         assertEquals("Selecciona el aprendiz para iniciar la conversación privada.", errorPrivadoSinTarget)
+
+        // Validación del nuevo chat convencional del foro
+        assertNotNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "   ",
+                enlaceUrl = "",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
+        assertNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "",
+                enlaceUrl = "https://kotlinlang.org",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
+        assertNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "",
+                enlaceUrl = "",
+                cantidadArchivos = 1,
+                esPrivado = true,
+                esInstructor = true,
+                aprendizObjetivoId = 2,
+            ),
+        )
+        assertNotNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "Hola",
+                enlaceUrl = "ftp://invalido",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
     }
 }

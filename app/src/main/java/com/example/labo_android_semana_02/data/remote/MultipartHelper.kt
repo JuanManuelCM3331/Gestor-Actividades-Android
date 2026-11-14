@@ -11,6 +11,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -67,6 +68,21 @@ class MultipartHelper @Inject constructor(
         }
     }
 
+    fun leerYValidarFile(file: File, mimeType: String = "audio/mp4"): Result<ArchivoLocal> {
+        val archivo = ArchivoLocal(
+            uriString = Uri.fromFile(file).toString(),
+            nombre = file.name,
+            mimeType = mimeType,
+            tamanoBytes = file.length(),
+        )
+        val validacion = validarArchivoUseCase(archivo)
+        return if (validacion.esValido) {
+            Result.success(archivo)
+        } else {
+            Result.failure(IllegalArgumentException(validacion.mensajeError ?: "Archivo grabado inválido."))
+        }
+    }
+
     fun crearParteTexto(valor: String): RequestBody =
         valor.toRequestBody("text/plain".toMediaTypeOrNull())
 
@@ -78,7 +94,12 @@ class MultipartHelper @Inject constructor(
 
         return runCatching {
             val uri = Uri.parse(archivo.uriString)
-            val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+            val stream = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                File(uri.path!!).inputStream()
+            } else {
+                context.contentResolver.openInputStream(uri)
+            }
+            val bytes = stream?.use { input ->
                 val out = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
                 var total = 0L

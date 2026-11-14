@@ -12,6 +12,7 @@ import com.example.labo_android_semana_02.domain.model.ArchivoLocal
 import com.example.labo_android_semana_02.domain.model.Curso
 import com.example.labo_android_semana_02.domain.model.HiloForo
 import com.example.labo_android_semana_02.domain.model.MaterialApoyo
+import com.example.labo_android_semana_02.domain.model.MensajeForo
 import com.example.labo_android_semana_02.domain.model.PersonasCurso
 import com.example.labo_android_semana_02.domain.model.ResumenCalificacionEstudiante
 import com.example.labo_android_semana_02.domain.model.RolUsuario
@@ -26,6 +27,7 @@ import com.example.labo_android_semana_02.domain.repository.MaterialRepository
 import com.example.labo_android_semana_02.domain.usecase.CalcularCalificacionCursoUseCase
 import com.example.labo_android_semana_02.domain.usecase.ValidarFormulariosUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,8 +45,15 @@ data class CursoPanelUiState(
     val materiales: List<MaterialApoyo> = emptyList(),
     val hilosPublicos: List<HiloForo> = emptyList(),
     val hilosPrivados: List<HiloForo> = emptyList(),
+    val mensajesChatPublico: List<MensajeForo> = emptyList(),
+    val mensajesChatPrivado: List<MensajeForo> = emptyList(),
     val modoForoPrivado: Boolean = false,
     val filtroAprendizForoId: Int? = null,
+    val chatTexto: String = "",
+    val chatEnlaceUrl: String = "",
+    val mostrarCampoEnlaceChat: Boolean = false,
+    val chatArchivosPendientes: List<ArchivoLocal> = emptyList(),
+    val enviandoMensajeChat: Boolean = false,
     val personas: PersonasCurso? = null,
     val miCalificacion: ResumenCalificacionEstudiante? = null,
     val calificacionesCurso: List<ResumenCalificacionEstudiante> = emptyList(),
@@ -102,21 +111,26 @@ class CursoPanelViewModel @Inject constructor(
             val actsDef = async { actividadRepository.sincronizarActividades(cursoId) }
             val matsDef = async { materialRepository.sincronizarMateriales(cursoId) }
             val persDef = async { cursoRepository.obtenerPersonas(cursoId) }
-            val pubDef = async { foroRepository.listarHilos(cursoId, TipoHiloForo.PUBLICO) }
-            val privDef = async {
-                foroRepository.listarHilos(
-                    cursoId,
-                    TipoHiloForo.PRIVADO,
-                    if (rol == RolUsuario.INSTRUCTOR) _uiState.value.filtroAprendizForoId else null,
-                )
-            }
+            val chatPubDef = async { foroRepository.listarMensajesChat(cursoId, TipoHiloForo.PUBLICO) }
 
             val cursoRes = cursoDef.await()
             val actsRes = actsDef.await()
             val matsRes = matsDef.await()
             val persRes = persDef.await()
-            val pubRes = pubDef.await()
-            val privRes = privDef.await()
+            val chatPubRes = chatPubDef.await()
+
+            val personasCargadas = persRes.getOrNull() ?: _uiState.value.personas
+            val aprendizPrivadoId = if (rol == RolUsuario.INSTRUCTOR) {
+                _uiState.value.filtroAprendizForoId ?: personasCargadas?.aprendices?.firstOrNull()?.id
+            } else {
+                null
+            }
+
+            val chatPrivRes = if (rol == RolUsuario.APRENDIZ || aprendizPrivadoId != null) {
+                foroRepository.listarMensajesChat(cursoId, TipoHiloForo.PRIVADO, aprendizPrivadoId)
+            } else {
+                Result.success(emptyList())
+            }
 
             var miCalif: ResumenCalificacionEstudiante? = _uiState.value.miCalificacion
             var listaCalifs: List<ResumenCalificacionEstudiante> = _uiState.value.calificacionesCurso
@@ -126,7 +140,7 @@ class CursoPanelViewModel @Inject constructor(
                 cursoRepository.obtenerCalificacionesCurso(cursoId).onSuccess { listaCalifs = it }
             }
 
-            val primerError = listOf(cursoRes, actsRes, matsRes, persRes, pubRes, privRes)
+            val primerError = listOf(cursoRes, actsRes, matsRes, persRes, chatPubRes, chatPrivRes)
                 .firstOrNull { it.isFailure }
                 ?.exceptionOrNull()
                 ?.message
@@ -134,9 +148,10 @@ class CursoPanelViewModel @Inject constructor(
             _uiState.update { prev ->
                 prev.copy(
                     curso = cursoRes.getOrNull() ?: prev.curso,
-                    personas = persRes.getOrNull() ?: prev.personas,
-                    hilosPublicos = pubRes.getOrNull() ?: prev.hilosPublicos,
-                    hilosPrivados = privRes.getOrNull() ?: prev.hilosPrivados,
+                    personas = personasCargadas,
+                    filtroAprendizForoId = aprendizPrivadoId,
+                    mensajesChatPublico = chatPubRes.getOrNull() ?: prev.mensajesChatPublico,
+                    mensajesChatPrivado = chatPrivRes.getOrNull() ?: prev.mensajesChatPrivado,
                     miCalificacion = miCalif,
                     calificacionesCurso = listaCalifs,
                     cargando = false,
@@ -318,8 +333,24 @@ class CursoPanelViewModel @Inject constructor(
         }
     }
 
+    fun abrirEnlaceExterno(url: String) {
+        fileDownloadManager.abrirEnlaceExterno(url).onFailure {
+            _uiState.update { st -> st.copy(error = "No hay navegador o aplicación disponible para abrir el enlace.") }
+        }
+    }
+
+    suspend fun descargarArchivoEnCache(adjunto: ArchivoAdjunto): Result<File> =
+        fileDownloadManager.descargarEnCache(adjunto.urlDescarga, "${adjunto.id}_${adjunto.nombreOriginal}")
+
     fun cambiarModoForo(privado: Boolean) {
-        _uiState.update { it.copy(modoForoPrivado = privado) }
+        _uiState.update { prev ->
+            val defaultAprendiz = if (privado && prev.usuario?.rol == RolUsuario.INSTRUCTOR && prev.filtroAprendizForoId == null) {
+                prev.personas?.aprendices?.firstOrNull()?.id
+            } else {
+                prev.filtroAprendizForoId
+            }
+            prev.copy(modoForoPrivado = privado, filtroAprendizForoId = defaultAprendiz)
+        }
         refrescarForo()
     }
 
@@ -328,16 +359,125 @@ class CursoPanelViewModel @Inject constructor(
         refrescarForo()
     }
 
+    fun onChatTextoChange(texto: String) {
+        _uiState.update { it.copy(chatTexto = texto, error = null) }
+    }
+
+    fun onChatEnlaceChange(url: String) {
+        _uiState.update { it.copy(chatEnlaceUrl = url, error = null) }
+    }
+
+    fun alternarCampoEnlaceChat() {
+        _uiState.update { prev ->
+            val mostrar = !prev.mostrarCampoEnlaceChat
+            val urlInicial = if (mostrar && prev.chatEnlaceUrl.isBlank()) "https://" else if (!mostrar) "" else prev.chatEnlaceUrl
+            prev.copy(mostrarCampoEnlaceChat = mostrar, chatEnlaceUrl = urlInicial)
+        }
+    }
+
+    fun agregarArchivoChatUri(uri: Uri) {
+        val archivo = validarYLeerArchivo(uri) ?: return
+        _uiState.update { prev ->
+            prev.copy(chatArchivosPendientes = (prev.chatArchivosPendientes + archivo).take(10))
+        }
+    }
+
+    fun agregarAudioGrabadoChat(file: File) {
+        val res = multipartHelper.leerYValidarFile(file, "audio/mp4")
+        res.fold(
+            onSuccess = { archivo ->
+                _uiState.update { prev ->
+                    prev.copy(chatArchivosPendientes = (prev.chatArchivosPendientes + archivo).take(10))
+                }
+            },
+            onFailure = { e -> _uiState.update { it.copy(error = e.message) } },
+        )
+    }
+
+    fun quitarArchivoChat(index: Int) {
+        _uiState.update { prev ->
+            prev.copy(chatArchivosPendientes = prev.chatArchivosPendientes.filterIndexed { i, _ -> i != index })
+        }
+    }
+
+    fun enviarMensajeChat() {
+        val st = _uiState.value
+        val esInstructor = st.usuario?.rol == RolUsuario.INSTRUCTOR
+        val targetId = if (st.modoForoPrivado && esInstructor) st.filtroAprendizForoId else null
+        val urlParaValidar = if (st.mostrarCampoEnlaceChat && st.chatEnlaceUrl.trim() != "https://") {
+            st.chatEnlaceUrl.trim()
+        } else {
+            ""
+        }
+
+        val err = validador.validarMensajeChatForo(
+            contenido = st.chatTexto,
+            enlaceUrl = urlParaValidar,
+            cantidadArchivos = st.chatArchivosPendientes.size,
+            esPrivado = st.modoForoPrivado,
+            esInstructor = esInstructor,
+            aprendizObjetivoId = targetId,
+        )
+        if (err != null) {
+            _uiState.update { it.copy(error = err) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(enviandoMensajeChat = true, error = null) }
+            val tipo = if (st.modoForoPrivado) TipoHiloForo.PRIVADO else TipoHiloForo.PUBLICO
+            foroRepository.enviarMensajeChat(
+                cursoId = cursoId,
+                tipo = tipo,
+                contenido = st.chatTexto,
+                enlaceUrl = urlParaValidar.ifEmpty { null },
+                aprendizObjetivoId = targetId,
+                archivos = st.chatArchivosPendientes,
+            ).fold(
+                onSuccess = { nuevo ->
+                    _uiState.update { prev ->
+                        if (tipo == TipoHiloForo.PRIVADO) {
+                            prev.copy(
+                                enviandoMensajeChat = false,
+                                chatTexto = "",
+                                chatEnlaceUrl = "",
+                                mostrarCampoEnlaceChat = false,
+                                chatArchivosPendientes = emptyList(),
+                                mensajesChatPrivado = prev.mensajesChatPrivado + nuevo,
+                            )
+                        } else {
+                            prev.copy(
+                                enviandoMensajeChat = false,
+                                chatTexto = "",
+                                chatEnlaceUrl = "",
+                                mostrarCampoEnlaceChat = false,
+                                chatArchivosPendientes = emptyList(),
+                                mensajesChatPublico = prev.mensajesChatPublico + nuevo,
+                            )
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(enviandoMensajeChat = false, error = e.message) }
+                },
+            )
+        }
+    }
+
     private fun refrescarForo() {
         viewModelScope.launch {
             val st = _uiState.value
             val tipo = if (st.modoForoPrivado) TipoHiloForo.PRIVADO else TipoHiloForo.PUBLICO
             val filtro = if (st.modoForoPrivado && st.usuario?.rol == RolUsuario.INSTRUCTOR) st.filtroAprendizForoId else null
-            foroRepository.listarHilos(cursoId, tipo, filtro).fold(
-                onSuccess = { hilos ->
+            if (st.modoForoPrivado && st.usuario?.rol == RolUsuario.INSTRUCTOR && filtro == null) {
+                _uiState.update { it.copy(mensajesChatPrivado = emptyList()) }
+                return@launch
+            }
+            foroRepository.listarMensajesChat(cursoId, tipo, filtro).fold(
+                onSuccess = { mensajes ->
                     _uiState.update { prev ->
-                        if (tipo == TipoHiloForo.PRIVADO) prev.copy(hilosPrivados = hilos)
-                        else prev.copy(hilosPublicos = hilos)
+                        if (tipo == TipoHiloForo.PRIVADO) prev.copy(mensajesChatPrivado = mensajes)
+                        else prev.copy(mensajesChatPublico = mensajes)
                     }
                 },
                 onFailure = { e -> _uiState.update { it.copy(error = e.message) } },
@@ -357,7 +497,7 @@ class CursoPanelViewModel @Inject constructor(
             val tipo = if (privado) TipoHiloForo.PRIVADO else TipoHiloForo.PUBLICO
             foroRepository.crearHilo(cursoId, tipo, titulo, contenido, aprendizObjetivoId).fold(
                 onSuccess = {
-                    _uiState.update { it.copy(cargando = false, mensaje = "Hilo publicado en el foro.") }
+                    _uiState.update { it.copy(cargando = false, mensaje = "Mensaje publicado en el foro.") }
                     refrescarForo()
                 },
                 onFailure = { e -> _uiState.update { it.copy(cargando = false, error = e.message) } },
@@ -390,6 +530,8 @@ class CursoPanelViewModel @Inject constructor(
             )
         }
     }
+
+    fun mostrarError(mensajeError: String) = _uiState.update { it.copy(error = mensajeError) }
 
     fun limpiarFeedback() = _uiState.update { it.copy(error = null, mensaje = null) }
 }

@@ -19,11 +19,10 @@ class FileDownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
 ) {
-    suspend fun descargarYAbrir(
+    suspend fun descargarEnCache(
         urlRelativaOCompleta: String,
         nombreArchivo: String,
-        mimeType: String?,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
             val fullUrl = resolverUrl(urlRelativaOCompleta)
             val request = Request.Builder().url(fullUrl).get().build()
@@ -40,22 +39,32 @@ class FileDownloadManager @Inject constructor(
                 destino.outputStream().use { out ->
                     body.byteStream().copyTo(out)
                 }
-
-                val contentUri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    destino,
-                )
-                val resolvedMime = mimeType?.takeIf { it.isNotBlank() } ?: "*/*"
-                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(contentUri, resolvedMime)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                val chooser = Intent.createChooser(viewIntent, "Abrir $nombreArchivo").apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(chooser)
+                destino
             }
+        }
+    }
+
+    suspend fun descargarYAbrir(
+        urlRelativaOCompleta: String,
+        nombreArchivo: String,
+        mimeType: String?,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val destino = descargarEnCache(urlRelativaOCompleta, nombreArchivo).getOrThrow()
+            val contentUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                destino,
+            )
+            val resolvedMime = mimeType?.takeIf { it.isNotBlank() } ?: "*/*"
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, resolvedMime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(viewIntent, "Abrir $nombreArchivo").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
         }
     }
 

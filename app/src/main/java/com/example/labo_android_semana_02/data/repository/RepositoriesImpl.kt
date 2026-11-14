@@ -389,7 +389,42 @@ class MaterialRepositoryImpl @Inject constructor(
 @Singleton
 class ForoRepositoryImpl @Inject constructor(
     private val foroApi: ForoApi,
+    private val multipartHelper: MultipartHelper,
 ) : ForoRepository {
+
+    override suspend fun listarMensajesChat(
+        cursoId: Int,
+        tipo: TipoHiloForo,
+        aprendizId: Int?,
+    ): Result<List<MensajeForo>> = safeApiCall {
+        foroApi.listarMensajesChat(cursoId, tipo.name, aprendizId).map { it.toDomain() }
+    }
+
+    override suspend fun enviarMensajeChat(
+        cursoId: Int,
+        tipo: TipoHiloForo,
+        contenido: String,
+        enlaceUrl: String?,
+        aprendizObjetivoId: Int?,
+        archivos: List<ArchivoLocal>,
+    ): Result<MensajeForo> {
+        val parts = mutableListOf<okhttp3.MultipartBody.Part>()
+        for (archivo in archivos) {
+            val partResult = multipartHelper.crearParteArchivo("archivos", archivo)
+            if (partResult.isFailure) return Result.failure(partResult.exceptionOrNull()!!)
+            parts.add(partResult.getOrThrow())
+        }
+        return safeApiCall {
+            foroApi.enviarMensajeChat(
+                cursoId = cursoId,
+                tipo = multipartHelper.crearParteTexto(tipo.name),
+                contenido = multipartHelper.crearParteTexto(contenido.trim()),
+                enlaceUrl = enlaceUrl?.trim()?.takeIf { it.isNotEmpty() }?.let(multipartHelper::crearParteTexto),
+                aprendizObjetivoId = aprendizObjetivoId?.toString()?.let(multipartHelper::crearParteTexto),
+                archivos = parts,
+            ).toDomain()
+        }
+    }
 
     override suspend fun listarHilos(
         cursoId: Int,
@@ -420,8 +455,30 @@ class ForoRepositoryImpl @Inject constructor(
     override suspend fun obtenerDetalleHilo(hiloId: Int): Result<HiloForoDetalle> =
         safeApiCall { foroApi.obtenerDetalle(hiloId).toDomain() }
 
-    override suspend fun responderHilo(hiloId: Int, contenido: String): Result<MensajeForo> =
-        safeApiCall {
-            foroApi.responder(hiloId, ResponderHiloRequestDto(contenido.trim())).toDomain()
+    override suspend fun responderHilo(
+        hiloId: Int,
+        contenido: String,
+        enlaceUrl: String?,
+        archivos: List<ArchivoLocal>,
+    ): Result<MensajeForo> {
+        if (archivos.isEmpty() && enlaceUrl.isNullOrBlank()) {
+            return safeApiCall {
+                foroApi.responder(hiloId, ResponderHiloRequestDto(contenido.trim())).toDomain()
+            }
         }
+        val parts = mutableListOf<okhttp3.MultipartBody.Part>()
+        for (archivo in archivos) {
+            val partResult = multipartHelper.crearParteArchivo("archivos", archivo)
+            if (partResult.isFailure) return Result.failure(partResult.exceptionOrNull()!!)
+            parts.add(partResult.getOrThrow())
+        }
+        return safeApiCall {
+            foroApi.responderMultipart(
+                hiloId = hiloId,
+                contenido = multipartHelper.crearParteTexto(contenido.trim()),
+                enlaceUrl = enlaceUrl?.trim()?.takeIf { it.isNotEmpty() }?.let(multipartHelper::crearParteTexto),
+                archivos = parts,
+            ).toDomain()
+        }
+    }
 }

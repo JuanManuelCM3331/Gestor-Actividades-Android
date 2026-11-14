@@ -6,17 +6,23 @@ import com.example.labo_android_semana_02.ui.components.AppFilterChip
 import com.example.labo_android_semana_02.ui.components.AppIconButton
 import com.example.labo_android_semana_02.ui.components.AppOutlinedButton
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
@@ -49,6 +55,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -59,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.labo_android_semana_02.ui.components.BarraCompositorChat
+import com.example.labo_android_semana_02.ui.components.BurbujaMensajeChat
 import com.example.labo_android_semana_02.ui.components.IconoTintado
 import com.example.labo_android_semana_02.ui.components.TituloConIcono
 import com.example.labo_android_semana_02.ui.components.colorParaTipoArchivo
@@ -66,11 +75,9 @@ import com.example.labo_android_semana_02.ui.theme.coloresExtendidos
 import com.example.labo_android_semana_02.domain.model.Actividad
 import com.example.labo_android_semana_02.domain.model.ArchivoAdjunto
 import com.example.labo_android_semana_02.domain.model.EstadoEntrega
-import com.example.labo_android_semana_02.domain.model.HiloForo
 import com.example.labo_android_semana_02.domain.model.MaterialApoyo
 import com.example.labo_android_semana_02.domain.model.PersonaCurso
 import com.example.labo_android_semana_02.domain.model.RolUsuario
-import com.example.labo_android_semana_02.domain.model.TipoHiloForo
 import com.example.labo_android_semana_02.domain.model.TipoMaterial
 import com.example.labo_android_semana_02.ui.components.DialogoConfirmacion
 import com.example.labo_android_semana_02.ui.components.EstadoEntregaChip
@@ -78,6 +85,7 @@ import com.example.labo_android_semana_02.ui.components.EstadoVacioTarjeta
 import com.example.labo_android_semana_02.ui.components.UiFormatters
 import com.example.labo_android_semana_02.ui.components.WrapRow
 import com.example.labo_android_semana_02.ui.viewmodel.CursoPanelUiState
+import java.io.File
 
 @Composable
 fun TabActividadesContenido(
@@ -412,147 +420,178 @@ fun TabForoContenido(
     esInstructor: Boolean,
     onCambiarModoForo: (Boolean) -> Unit,
     onCambiarFiltroAprendiz: (Int?) -> Unit,
-    onNuevoHilo: () -> Unit,
-    onAbrirHilo: (Int) -> Unit,
+    onChatTextoChange: (String) -> Unit,
+    onChatEnlaceChange: (String) -> Unit,
+    onAlternarCampoEnlaceChat: () -> Unit,
+    onAgregarArchivoChatUri: (Uri) -> Unit,
+    onAgregarAudioGrabadoChat: (File) -> Unit,
+    onQuitarArchivoChat: (Int) -> Unit,
+    onEnviarMensajeChat: () -> Unit,
+    onAbrirAdjunto: (ArchivoAdjunto) -> Unit,
+    onAbrirEnlace: (String) -> Unit,
+    onDescargarEnCache: suspend (ArchivoAdjunto) -> Result<File>,
+    onMostrarError: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val hilos = if (state.modoForoPrivado) state.hilosPrivados else state.hilosPublicos
+    val mensajes = if (state.modoForoPrivado) state.mensajesChatPrivado else state.mensajesChatPublico
+    val aprendices = state.personas?.aprendices.orEmpty()
+    val aprendizSeleccionado = aprendices.firstOrNull { it.id == state.filtroAprendizForoId }
+    val listState = rememberLazyListState()
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            AppFilterChip(
-                selected = !state.modoForoPrivado,
-                onClick = { onCambiarModoForo(false) },
-                icon = Icons.Default.Public,
-                label = { Text("Foro público") },
-                modifier = Modifier.weight(1f),
-            )
-            AppFilterChip(
-                selected = state.modoForoPrivado,
-                onClick = { onCambiarModoForo(true) },
-                icon = Icons.Default.Lock,
-                label = { Text("Foro privado 1 a 1") },
-                modifier = Modifier.weight(1f),
-            )
+    LaunchedEffect(mensajes.size, state.modoForoPrivado, state.filtroAprendizForoId) {
+        if (mensajes.isNotEmpty()) {
+            listState.animateScrollToItem(mensajes.lastIndex)
         }
+    }
 
-        if (state.modoForoPrivado && esInstructor) {
-            val aprendices = state.personas?.aprendices.orEmpty()
-            if (aprendices.isNotEmpty()) {
-                Text("Filtrar conversación por aprendiz:", style = MaterialTheme.typography.labelMedium)
-                WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
-                    AppFilterChip(
-                        selected = state.filtroAprendizForoId == null,
-                        onClick = { onCambiarFiltroAprendiz(null) },
-                        label = { Text("Todos") },
-                    )
-                    aprendices.forEach { est ->
-                        AppFilterChip(
-                            selected = state.filtroAprendizForoId == est.id,
-                            onClick = { onCambiarFiltroAprendiz(est.id) },
-                            icon = Icons.Default.Person,
-                            label = { Text(est.nombre) },
+    val puedeChatear = !state.modoForoPrivado || !esInstructor || state.filtroAprendizForoId != null
+
+    Column(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AppFilterChip(
+                    selected = !state.modoForoPrivado,
+                    onClick = { onCambiarModoForo(false) },
+                    icon = Icons.Default.Public,
+                    label = { Text("Chat grupal", maxLines = 1) },
+                    modifier = Modifier.weight(1f),
+                )
+                AppFilterChip(
+                    selected = state.modoForoPrivado,
+                    onClick = { onCambiarModoForo(true) },
+                    icon = Icons.Default.Lock,
+                    label = { Text("Chat privado", maxLines = 1) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (state.modoForoPrivado) {
+                if (esInstructor) {
+                    if (aprendices.isNotEmpty()) {
+                        Text(
+                            text = "Conversación privada con aprendiz:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
+                            aprendices.forEach { est ->
+                                AppFilterChip(
+                                    selected = state.filtroAprendizForoId == est.id,
+                                    onClick = { onCambiarFiltroAprendiz(est.id) },
+                                    icon = Icons.Default.Person,
+                                    label = { Text(est.nombre) },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text = "Chat privado 1 a 1 con ${state.curso?.instructorNombre ?: "tu instructor"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        }
                     }
                 }
             }
         }
 
-        AppButton(onClick = onNuevoHilo, icon = Icons.Default.Add, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                if (state.modoForoPrivado) "Nuevo mensaje privado" else "Nuevo tema público"
-            )
-        }
-
-        if (hilos.isEmpty() && !state.cargando) {
-            EstadoVacioTarjeta(
-                icono = if (state.modoForoPrivado) Icons.Default.Lock else Icons.Default.Public,
-                titulo = if (state.modoForoPrivado) "Sin conversaciones privadas" else "Foro público sin temas",
-                descripcion = if (state.modoForoPrivado) {
-                    "Las conversaciones privadas solo son visibles entre el instructor y el aprendiz destinatario."
-                } else {
-                    "Publica un hilo para compartir dudas o anuncios con todo el curso."
-                },
-            )
-        }
-
-        hilos.forEach { hilo ->
-            TarjetaHiloForo(hilo = hilo, onClick = { onAbrirHilo(hilo.id) })
-        }
-    }
-}
-
-@Composable
-private fun TarjetaHiloForo(hilo: HiloForo, onClick: () -> Unit) {
-    val privado = hilo.tipo == TipoHiloForo.PRIVADO
-    val acento = if (privado) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, acento.copy(alpha = 0.30f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Column(
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconoTintado(
-                    icono = if (privado) Icons.Default.Lock else Icons.Default.Public,
-                    color = acento,
-                    tamano = 40.dp,
-                    circular = true,
-                )
-                Text(
-                    text = hilo.titulo,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Surface(
-                    color = if (privado) {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(
-                        text = if (privado) "Privado 1:1" else "Público",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (privado) MaterialTheme.colorScheme.onTertiaryContainer
-                        else MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            if (state.modoForoPrivado && esInstructor && aprendices.isEmpty() && !state.cargando) {
+                item {
+                    EstadoVacioTarjeta(
+                        icono = Icons.Default.Lock,
+                        titulo = "Sin aprendices inscritos",
+                        descripcion = "Cuando los aprendices se unan al curso con el código de acceso podrás chatear 1 a 1 con cada uno.",
+                    )
+                }
+            } else if (mensajes.isEmpty() && !state.cargando) {
+                item {
+                    EstadoVacioTarjeta(
+                        icono = if (state.modoForoPrivado) Icons.Default.Lock else Icons.Default.Public,
+                        titulo = if (state.modoForoPrivado) {
+                            if (esInstructor && aprendizSeleccionado != null) {
+                                "Inicia el chat con ${aprendizSeleccionado.nombre}"
+                            } else {
+                                "Sin mensajes privados aún"
+                            }
+                        } else {
+                            "El chat grupal está listo"
+                        },
+                        descripcion = "Escribe en la barra inferior o adjunta imágenes, archivos, notas de voz, audios o enlaces URL.",
                     )
                 }
             }
-            Text(
-                text = hilo.contenido,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            val contextoPrivado = if (hilo.tipo == TipoHiloForo.PRIVADO && hilo.aprendizObjetivoNombre != null) {
-                " • Con: ${hilo.aprendizObjetivoNombre}"
-            } else {
-                ""
+
+            items(mensajes, key = { it.id }) { msg ->
+                BurbujaMensajeChat(
+                    mensaje = msg,
+                    esMio = msg.autorId == state.usuario?.id,
+                    onAbrirAdjunto = onAbrirAdjunto,
+                    onAbrirEnlace = onAbrirEnlace,
+                    onDescargarEnCache = onDescargarEnCache,
+                )
             }
-            Text(
-                text = "Por ${hilo.autorNombre} (${if (hilo.autorRol == RolUsuario.INSTRUCTOR) "Instructor" else "Aprendiz"})$contextoPrivado • ${hilo.totalMensajes} respuestas",
-                style = MaterialTheme.typography.labelSmall,
-                color = acento,
-            )
         }
+
+        BarraCompositorChat(
+            texto = state.chatTexto,
+            onTextoChange = onChatTextoChange,
+            enlaceUrl = state.chatEnlaceUrl,
+            mostrarCampoEnlace = state.mostrarCampoEnlaceChat,
+            onEnlaceChange = onChatEnlaceChange,
+            onAlternarCampoEnlace = onAlternarCampoEnlaceChat,
+            archivosPendientes = state.chatArchivosPendientes,
+            onAgregarUri = onAgregarArchivoChatUri,
+            onAgregarAudioGrabado = onAgregarAudioGrabadoChat,
+            onQuitarArchivo = onQuitarArchivoChat,
+            onEnviar = onEnviarMensajeChat,
+            onErrorPermisoAudio = onMostrarError,
+            enviando = state.enviandoMensajeChat,
+            habilitado = puedeChatear,
+            placeholder = when {
+                !puedeChatear -> "Selecciona un aprendiz para chatear..."
+                state.modoForoPrivado && esInstructor && aprendizSeleccionado != null ->
+                    "Mensaje privado para ${aprendizSeleccionado.nombre}..."
+                state.modoForoPrivado -> "Escribe un mensaje privado al instructor..."
+                else -> "Escribe un mensaje para todo el curso..."
+            },
+        )
     }
 }
 

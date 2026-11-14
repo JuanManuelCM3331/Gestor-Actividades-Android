@@ -172,6 +172,24 @@ interface MaterialApi {
 }
 
 interface ForoApi {
+    @GET("api/foro/curso/{cursoId}/chat")
+    suspend fun listarMensajesChat(
+        @Path("cursoId") cursoId: Int,
+        @Query("tipo") tipo: String,
+        @Query("aprendizId") aprendizId: Int? = null,
+    ): List<MensajeForoDto>
+
+    @Multipart
+    @POST("api/foro/curso/{cursoId}/chat")
+    suspend fun enviarMensajeChat(
+        @Path("cursoId") cursoId: Int,
+        @Part("tipo") tipo: RequestBody,
+        @Part("contenido") contenido: RequestBody,
+        @Part("enlace_url") enlaceUrl: RequestBody?,
+        @Part("aprendiz_objetivo_id") aprendizObjetivoId: RequestBody?,
+        @Part archivos: List<MultipartBody.Part>,
+    ): MensajeForoDto
+
     @GET("api/foro/curso/{cursoId}")
     suspend fun listarHilos(
         @Path("cursoId") cursoId: Int,
@@ -192,5 +210,14 @@ interface ForoApi {
     suspend fun responder(
         @Path("hiloId") hiloId: Int,
         @Body request: ResponderHiloRequestDto,
+    ): MensajeForoDto
+
+    @Multipart
+    @POST("api/foro/{hiloId}/mensajes")
+    suspend fun responderMultipart(
+        @Path("hiloId") hiloId: Int,
+        @Part("contenido") contenido: RequestBody,
+        @Part("enlace_url") enlaceUrl: RequestBody?,
+        @Part archivos: List<MultipartBody.Part>,
     ): MensajeForoDto
 }

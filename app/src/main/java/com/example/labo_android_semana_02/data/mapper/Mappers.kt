@@ -370,6 +370,8 @@ fun MensajeForoDto.toDomain(): MensajeForo = MensajeForo(
     autorNombre = autorNombre,
     autorRol = parseRol(autorRol),
     contenido = contenido,
+    enlaceUrl = enlaceUrl,
+    archivos = archivos.map { it.toDomain() },
     createdAt = createdAt,
 )
 
