@@ -46,6 +46,9 @@ interface AuthApi {
 
     @GET("api/auth/me")
     suspend fun me(): UsuarioDto
+
+    @POST("api/auth/logout")
+    suspend fun logout(): Response<Unit>
 }
 
 interface CursoApi {

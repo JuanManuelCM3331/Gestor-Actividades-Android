@@ -64,7 +64,7 @@ class AuthViewModel @Inject constructor(
     fun enviarFormulario() {
         val state = _uiState.value
         val errorLocal = if (state.esRegistro) {
-            validador.validarRegistro(state.nombre, state.email, state.password)
+            validador.validarRegistro(state.nombre, state.email, state.password, state.rolSeleccionado)
         } else {
             validador.validarLogin(state.email, state.password)
         }

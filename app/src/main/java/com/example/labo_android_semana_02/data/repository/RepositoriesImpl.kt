@@ -7,6 +7,7 @@ import com.example.labo_android_semana_02.data.local.db.MaterialDao
 import com.example.labo_android_semana_02.data.local.db.PersonaDao
 import com.example.labo_android_semana_02.data.mapper.toDomain
 import com.example.labo_android_semana_02.data.mapper.toEntity
+import com.example.labo_android_semana_02.data.remote.FileDownloadManager
 import com.example.labo_android_semana_02.data.remote.MultipartHelper
 import com.example.labo_android_semana_02.data.remote.api.ActividadApi
 import com.example.labo_android_semana_02.data.remote.api.AuthApi
@@ -71,6 +72,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val actividadDao: ActividadDao,
     private val materialDao: MaterialDao,
     private val personaDao: PersonaDao,
+    private val fileDownloadManager: FileDownloadManager,
 ) : AuthRepository {
     override val sessionFlow: Flow<AuthSession?> = dataStore.sessionFlow
 
@@ -111,6 +113,10 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun logout() {
+        // SEC-05: Revocar el JWT activo en el servidor antes de limpiar la sesión local
+        withContext(Dispatchers.IO) {
+            runCatching { authApi.logout() }
+        }
         dataStore.clearSession()
         limpiarCachesLocales()
     }
@@ -120,6 +126,8 @@ class AuthRepositoryImpl @Inject constructor(
         actividadDao.eliminarTodo()
         materialDao.eliminarTodo()
         personaDao.eliminarTodo()
+        // SEC-06: Borrar archivos descargados y grabaciones de voz en caché
+        fileDownloadManager.limpiarArchivosTemporales()
     }
 }
 

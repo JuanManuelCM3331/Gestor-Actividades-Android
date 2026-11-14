@@ -55,6 +55,9 @@ class ValidarArchivoYFormulariosUseCaseTest {
         assertNotNull(validarFormularios.validarRegistro("Ab", "a@b.co", "123456"))
         assertNotNull(validarFormularios.validarRegistro("Ana López", "a@b.co", "123"))
         assertNull(validarFormularios.validarRegistro("Ana López", "a@b.co", "123456"))
+        // SEC-02: El registro como INSTRUCTOR exige dominio institucional autorizado
+        assertNotNull(validarFormularios.validarRegistro("Carlos Docente", "carlos@gmail.com", "123456", RolUsuario.INSTRUCTOR))
+        assertNull(validarFormularios.validarRegistro("Carlos Docente", "carlos@sena.edu.co", "123456", RolUsuario.INSTRUCTOR))
 
         assertNotNull(validarFormularios.validarCurso("AB", "Descripción"))
         assertNull(validarFormularios.validarCurso("Programación Web", "Curso práctico"))

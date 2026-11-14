@@ -209,6 +209,13 @@ fun AuthScreen(
                                     modifier = Modifier.weight(1f),
                                 )
                             }
+                            if (state.rolSeleccionado == RolUsuario.INSTRUCTOR) {
+                                Text(
+                                    text = "Requiere correo institucional (@sena.edu.co o @ctma.edu.co).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
 
                         OutlinedTextField(
