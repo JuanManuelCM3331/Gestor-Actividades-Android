@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Labo_android_semana_02" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Labo_android_semana_02" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ventana_fondo</item>
+        <item name="android:colorPrimary">@color/paleta_terracota</item>
+    </style>
 </resources>
