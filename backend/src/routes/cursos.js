@@ -35,21 +35,91 @@ async function generarCodigoUnico() {
 }
 
 async function calcularResumenCursoEstudiante(cursoId, aprendizId) {
+  const mapPorAprendiz = await calcularResumenesCursoPorAprendiz(cursoId, [aprendizId]);
+  return mapPorAprendiz.get(Number(aprendizId)) || calcularResumenCalificacion([], new Map());
+}
+
+/**
+ * PERF-04: Calcula las calificaciones de todos los aprendices de un curso con solo 2 consultas SQL
+ * (1 para actividades y 1 para todas las entregas del curso), eliminando el problema N+1.
+ */
+async function calcularResumenesCursoPorAprendiz(cursoId, aprendizIds) {
+  const cleanIds = (aprendizIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
+  const result = new Map();
+  if (cleanIds.length === 0) return result;
+
   const [actividades] = await pool.query(
     'SELECT id, titulo, fecha_limite, puntaje_maximo FROM actividades WHERE curso_id = ? ORDER BY fecha_limite ASC',
     [cursoId]
   );
-  const [entregas] = await pool.query(
-    `SELECT e.* FROM entregas e
-     INNER JOIN actividades a ON e.actividad_id = a.id
-     WHERE a.curso_id = ? AND e.aprendiz_id = ?`,
-    [cursoId, aprendizId]
-  );
-  const map = new Map();
-  for (const row of entregas) {
-    map.set(row.actividad_id, row);
+
+  const entregasPorAprendiz = new Map();
+  if (actividades.length > 0) {
+    const [entregas] = await pool.query(
+      `SELECT e.* FROM entregas e
+       INNER JOIN actividades a ON e.actividad_id = a.id
+       WHERE a.curso_id = ? AND e.aprendiz_id IN (?)`,
+      [cursoId, cleanIds]
+    );
+    for (const row of entregas) {
+      let mapAct = entregasPorAprendiz.get(row.aprendiz_id);
+      if (!mapAct) {
+        mapAct = new Map();
+        entregasPorAprendiz.set(row.aprendiz_id, mapAct);
+      }
+      mapAct.set(row.actividad_id, row);
+    }
   }
-  return calcularResumenCalificacion(actividades, map);
+
+  for (const aprendizId of cleanIds) {
+    const mapAct = entregasPorAprendiz.get(aprendizId) || new Map();
+    result.set(aprendizId, calcularResumenCalificacion(actividades, mapAct));
+  }
+  return result;
+}
+
+/**
+ * PERF-04: Calcula los resúmenes de múltiples cursos para un único aprendiz con solo 2 consultas SQL.
+ */
+async function calcularResumenesCursosDeAprendiz(cursoIds, aprendizId) {
+  const cleanCursoIds = (cursoIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
+  const result = new Map();
+  if (cleanCursoIds.length === 0) return result;
+
+  const [actividades] = await pool.query(
+    'SELECT id, curso_id, titulo, fecha_limite, puntaje_maximo FROM actividades WHERE curso_id IN (?) ORDER BY fecha_limite ASC',
+    [cleanCursoIds]
+  );
+  const [entregas] = await pool.query(
+    `SELECT e.*, a.curso_id FROM entregas e
+     INNER JOIN actividades a ON e.actividad_id = a.id
+     WHERE a.curso_id IN (?) AND e.aprendiz_id = ?`,
+    [cleanCursoIds, aprendizId]
+  );
+
+  const actsPorCurso = new Map();
+  for (const act of actividades) {
+    const list = actsPorCurso.get(act.curso_id) || [];
+    list.push(act);
+    actsPorCurso.set(act.curso_id, list);
+  }
+
+  const entregasPorCurso = new Map();
+  for (const row of entregas) {
+    let mapAct = entregasPorCurso.get(row.curso_id);
+    if (!mapAct) {
+      mapAct = new Map();
+      entregasPorCurso.set(row.curso_id, mapAct);
+    }
+    mapAct.set(row.actividad_id, row);
+  }
+
+  for (const cId of cleanCursoIds) {
+    const acts = actsPorCurso.get(cId) || [];
+    const mapAct = entregasPorCurso.get(cId) || new Map();
+    result.set(cId, calcularResumenCalificacion(acts, mapAct));
+  }
+  return result;
 }
 
 router.get('/', async (req, res, next) => {
@@ -86,20 +156,22 @@ router.get('/', async (req, res, next) => {
       [req.user.id]
     );
 
-    const enriched = await Promise.all(
-      rows.map(async (r) => {
-        const resumen = await calcularResumenCursoEstudiante(r.id, req.user.id);
-        return {
-          ...r,
-          codigo_acceso: null,
-          codigo_activo: false,
-          total_estudiantes: Number(r.total_estudiantes),
-          total_actividades: Number(r.total_actividades),
-          nota_0_5: resumen.nota_0_5,
-          nota_0_100: resumen.nota_0_100,
-        };
-      })
+    const resumenesPorCurso = await calcularResumenesCursosDeAprendiz(
+      rows.map((r) => r.id),
+      req.user.id
     );
+    const enriched = rows.map((r) => {
+      const resumen = resumenesPorCurso.get(r.id);
+      return {
+        ...r,
+        codigo_acceso: null,
+        codigo_activo: false,
+        total_estudiantes: Number(r.total_estudiantes),
+        total_actividades: Number(r.total_actividades),
+        nota_0_5: resumen ? resumen.nota_0_5 : null,
+        nota_0_100: resumen ? resumen.nota_0_100 : null,
+      };
+    });
     return res.json(enriched);
   } catch (err) {
     return next(err);
@@ -351,23 +423,27 @@ router.get('/:cursoId/personas', async (req, res, next) => {
       [access.curso.id]
     );
 
-    const estudiantesConNota = await Promise.all(
-      aprendices.map(async (est) => {
-        if (access.isOwner || est.id === req.user.id) {
-          const resumen = await calcularResumenCursoEstudiante(access.curso.id, est.id);
-          return {
-            ...est,
-            nota_0_5: resumen.nota_0_5,
-            nota_0_100: resumen.nota_0_100,
-          };
-        }
+    // PERF-04: Calcular en lote las notas de los aprendices visibles en 2 consultas SQL fijas
+    const idsVisibles = access.isOwner
+      ? aprendices.map((est) => est.id)
+      : aprendices.filter((est) => est.id === req.user.id).map((est) => est.id);
+    const resumenesMap = await calcularResumenesCursoPorAprendiz(access.curso.id, idsVisibles);
+
+    const estudiantesConNota = aprendices.map((est) => {
+      const resumen = resumenesMap.get(est.id);
+      if (resumen) {
         return {
           ...est,
-          nota_0_5: null,
-          nota_0_100: null,
+          nota_0_5: resumen.nota_0_5,
+          nota_0_100: resumen.nota_0_100,
         };
-      })
-    );
+      }
+      return {
+        ...est,
+        nota_0_5: null,
+        nota_0_100: null,
+      };
+    });
 
     return res.json({
       instructor: instRows[0],
@@ -423,12 +499,15 @@ router.get('/:cursoId/calificaciones', async (req, res, next) => {
       [access.curso.id]
     );
 
-    const reporte = await Promise.all(
-      aprendices.map(async (est) => {
-        const resumen = await calcularResumenCursoEstudiante(access.curso.id, est.id);
-        return { aprendiz: est, ...resumen };
-      })
+    // PERF-04: Obtener el reporte de toda la clase en lote sin N+1 consultas
+    const resumenesMap = await calcularResumenesCursoPorAprendiz(
+      access.curso.id,
+      aprendices.map((est) => est.id)
     );
+    const reporte = aprendices.map((est) => {
+      const resumen = resumenesMap.get(est.id) || calcularResumenCalificacion([], new Map());
+      return { aprendiz: est, ...resumen };
+    });
 
     return res.json(reporte);
   } catch (err) {

@@ -7,35 +7,38 @@ const router = express.Router();
 const uploadForo = createMulterUpload('foro');
 router.use(authenticate);
 
-let schemaChecked = false;
-async function ensureForoChatSchema() {
-  if (schemaChecked) return;
-  try {
-    const [cols] = await pool.query("SHOW COLUMNS FROM foro_mensajes LIKE 'enlace_url'");
-    if (cols.length === 0) {
-      await pool.query('ALTER TABLE foro_mensajes ADD COLUMN enlace_url VARCHAR(512) NULL AFTER contenido');
-    }
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS foro_archivos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        mensaje_id INT NOT NULL,
-        nombre_original VARCHAR(255) NOT NULL,
-        nombre_archivo VARCHAR(255) NOT NULL,
-        mime_type VARCHAR(140) NOT NULL,
-        tamano_bytes BIGINT NOT NULL,
-        created_at BIGINT NOT NULL,
-        CONSTRAINT fk_foro_archivos_mensaje
-          FOREIGN KEY (mensaje_id) REFERENCES foro_mensajes(id)
-          ON UPDATE CASCADE
-          ON DELETE CASCADE,
-        INDEX idx_foro_archivos_mensaje (mensaje_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-    schemaChecked = true;
-  } catch (_err) {
-    // Si la tabla ya existe o hay concurrencia, continuar
-    schemaChecked = true;
+// PERF-06: Promesa singleton para ejecutar la verificación de esquema una única vez por proceso
+let foroSchemaPromise = null;
+function ensureForoChatSchema() {
+  if (!foroSchemaPromise) {
+    foroSchemaPromise = (async () => {
+      try {
+        const [cols] = await pool.query("SHOW COLUMNS FROM foro_mensajes LIKE 'enlace_url'");
+        if (cols.length === 0) {
+          await pool.query('ALTER TABLE foro_mensajes ADD COLUMN enlace_url VARCHAR(512) NULL AFTER contenido');
+        }
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS foro_archivos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mensaje_id INT NOT NULL,
+            nombre_original VARCHAR(255) NOT NULL,
+            nombre_archivo VARCHAR(255) NOT NULL,
+            mime_type VARCHAR(140) NOT NULL,
+            tamano_bytes BIGINT NOT NULL,
+            created_at BIGINT NOT NULL,
+            CONSTRAINT fk_foro_archivos_mensaje
+              FOREIGN KEY (mensaje_id) REFERENCES foro_mensajes(id)
+              ON UPDATE CASCADE
+              ON DELETE CASCADE,
+            INDEX idx_foro_archivos_mensaje (mensaje_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+      } catch (_err) {
+        // Si la tabla ya existe o hay concurrencia, continuar
+      }
+    })();
   }
+  return foroSchemaPromise;
 }
 
 function optionalMultipart(req, res, next) {
@@ -218,33 +221,52 @@ router.get('/curso/:cursoId/chat', async (req, res, next) => {
     if (hilos.length === 0) return res.json([]);
 
     const hiloIds = hilos.map((h) => h.id);
-    const [mensajesRows] = await pool.query(
-      `SELECT m.*, u.nombre AS autor_nombre, u.rol AS autor_rol
-       FROM foro_mensajes m
-       INNER JOIN usuarios u ON u.id = m.autor_id
-       WHERE m.hilo_id IN (?)
-       ORDER BY m.created_at ASC, m.id ASC`,
-      [hiloIds]
-    );
+
+    // PERF-05: Paginación por cursor (?beforeId=...&limit=...) con techo máximo de seguridad
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 300) : 150;
+    const beforeId = Number(req.query.beforeId);
+    const hasBeforeCursor = Number.isInteger(beforeId) && beforeId > 0;
+
+    let msgQuery = `
+      SELECT m.*, u.nombre AS autor_nombre, u.rol AS autor_rol
+      FROM foro_mensajes m
+      INNER JOIN usuarios u ON u.id = m.autor_id
+      WHERE m.hilo_id IN (?)
+    `;
+    const msgParams = [hiloIds];
+    if (hasBeforeCursor) {
+      msgQuery += ' AND m.id < ?';
+      msgParams.push(beforeId);
+    }
+    msgQuery += ' ORDER BY m.created_at DESC, m.id DESC LIMIT ?';
+    msgParams.push(limit);
+
+    const [mensajesDesc] = await pool.query(msgQuery, msgParams);
+    const mensajesRows = mensajesDesc.reverse();
 
     const enriched = await attachFilesToMessages(mensajesRows);
 
-    // Incluir mensajes iniciales de hilos heredados (creados con título/contenido)
-    const legacySeedMessages = hilos
-      .filter((h) => h.contenido && String(h.contenido).trim().length > 0 && !String(h.titulo).startsWith('__CHAT_'))
-      .map((h) => ({
-        id: -Number(h.id),
-        hilo_id: Number(h.id),
-        autor_id: Number(h.autor_id),
-        autor_nombre: h.autor_nombre,
-        autor_rol: h.autor_rol,
-        contenido: h.contenido,
-        enlace_url: null,
-        archivos: [],
-        created_at: Number(h.created_at),
-      }));
+    // Incluir mensajes iniciales de hilos heredados cuando se consulta la primera página
+    const legacySeedMessages = hasBeforeCursor
+      ? []
+      : hilos
+          .filter((h) => h.contenido && String(h.contenido).trim().length > 0 && !String(h.titulo).startsWith('__CHAT_'))
+          .map((h) => ({
+            id: -Number(h.id),
+            hilo_id: Number(h.id),
+            autor_id: Number(h.autor_id),
+            autor_nombre: h.autor_nombre,
+            autor_rol: h.autor_rol,
+            contenido: h.contenido,
+            enlace_url: null,
+            archivos: [],
+            created_at: Number(h.created_at),
+          }));
 
-    const combined = [...legacySeedMessages, ...enriched].sort((a, b) => a.created_at - b.created_at);
+    const combined = [...legacySeedMessages, ...enriched]
+      .sort((a, b) => a.created_at - b.created_at)
+      .slice(-limit);
     return res.json(combined);
   } catch (err) {
     return next(err);
