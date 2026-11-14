@@ -1,6 +1,28 @@
 package com.example.labo_android_semana_02.ui.screens
 
+import com.example.labo_android_semana_02.ui.components.AppAssistChip
+import com.example.labo_android_semana_02.ui.components.AppButton
+import com.example.labo_android_semana_02.ui.components.AppFilterChip
+import com.example.labo_android_semana_02.ui.components.AppIconButton
+import com.example.labo_android_semana_02.ui.components.AppTextButton
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.example.labo_android_semana_02.ui.components.IconoTintado
+import com.example.labo_android_semana_02.ui.components.TituloConIcono
+import com.example.labo_android_semana_02.ui.theme.coloresExtendidos
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,23 +40,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -63,10 +81,18 @@ fun AuthScreen(
 ) {
     var mostrarPassword by remember { mutableStateOf(false) }
 
-    Scaffold { innerPadding ->
+    Scaffold(containerColor = Color.Transparent) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                            MaterialTheme.colorScheme.background,
+                        ),
+                    ),
+                )
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             contentAlignment = Alignment.Center,
@@ -83,29 +109,45 @@ fun AuthScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column {
-                        Text(
-                            text = "CTMA Cursos",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconoTintado(
+                            icono = Icons.Filled.School,
                             color = MaterialTheme.colorScheme.primary,
+                            tamano = 52.dp,
                         )
-                        Text(
-                            text = "Plataforma académica para instructores y aprendices",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "CTMA Cursos",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Text(
+                                text = "Plataforma académica para instructores y aprendices",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    TextButton(onClick = onAlternarTema) {
-                        Text(if (temaOscuro) "Claro" else "Oscuro")
+                    AppIconButton(onClick = onAlternarTema) {
+                        Icon(
+                            imageVector = if (temaOscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            contentDescription = if (temaOscuro) "Cambiar a modo claro" else "Cambiar a modo oscuro",
+                            tint = if (temaOscuro) MaterialTheme.coloresExtendidos.advertencia
+                            else MaterialTheme.colorScheme.tertiary,
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Card(
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
@@ -114,10 +156,9 @@ fun AuthScreen(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(
-                            text = if (state.esRegistro) "Crear cuenta" else "Iniciar sesión",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
+                        TituloConIcono(
+                            texto = if (state.esRegistro) "Crear cuenta" else "Iniciar sesión",
+                            icono = if (state.esRegistro) Icons.Filled.PersonAdd else Icons.AutoMirrored.Filled.Login,
                         )
 
                         if (state.error != null) {
@@ -133,7 +174,13 @@ fun AuthScreen(
                                 value = state.nombre,
                                 onValueChange = onNombreChange,
                                 label = { Text("Nombre completo") },
-                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -147,15 +194,17 @@ fun AuthScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                FilterChip(
+                                AppFilterChip(
                                     selected = state.rolSeleccionado == RolUsuario.APRENDIZ,
                                     onClick = { onRolChange(RolUsuario.APRENDIZ) },
+                                    icon = Icons.Filled.School,
                                     label = { Text("Aprendiz") },
                                     modifier = Modifier.weight(1f),
                                 )
-                                FilterChip(
+                                AppFilterChip(
                                     selected = state.rolSeleccionado == RolUsuario.INSTRUCTOR,
                                     onClick = { onRolChange(RolUsuario.INSTRUCTOR) },
+                                    icon = Icons.Filled.Badge,
                                     label = { Text("Instructor") },
                                     modifier = Modifier.weight(1f),
                                 )
@@ -166,7 +215,13 @@ fun AuthScreen(
                             value = state.email,
                             onValueChange = onEmailChange,
                             label = { Text("Correo electrónico") },
-                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Email,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
@@ -176,10 +231,20 @@ fun AuthScreen(
                             value = state.password,
                             onValueChange = onPasswordChange,
                             label = { Text("Contraseña") },
-                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            },
                             trailingIcon = {
-                                TextButton(onClick = { mostrarPassword = !mostrarPassword }) {
-                                    Text(if (mostrarPassword) "Ocultar" else "Ver")
+                                AppIconButton(onClick = { mostrarPassword = !mostrarPassword }) {
+                                    Icon(
+                                        imageVector = if (mostrarPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = if (mostrarPassword) "Ocultar contraseña" else "Mostrar contraseña",
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                    )
                                 }
                             },
                             visualTransformation = if (mostrarPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -188,12 +253,15 @@ fun AuthScreen(
                             modifier = Modifier.fillMaxWidth(),
                         )
 
-                        Button(
+                        AppButton(
                             onClick = onEnviar,
                             enabled = !state.cargando,
+                            icon = if (state.cargando) null
+                            else if (state.esRegistro) Icons.Filled.PersonAdd
+                            else Icons.AutoMirrored.Filled.Login,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp),
+                                .height(50.dp),
                         ) {
                             if (state.cargando) {
                                 CircularProgressIndicator(
@@ -206,7 +274,7 @@ fun AuthScreen(
                             }
                         }
 
-                        TextButton(
+                        AppTextButton(
                             onClick = onAlternarModo,
                             modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) {
@@ -226,18 +294,20 @@ fun AuthScreen(
                                 horizontalSpacing = 8.dp,
                                 verticalSpacing = 6.dp,
                             ) {
-                                AssistChip(
+                                AppAssistChip(
                                     onClick = {
                                         onEmailChange("instructor@ctma.edu.co")
                                         onPasswordChange("Instructor123!")
                                     },
+                                    icon = Icons.Filled.Badge,
                                     label = { Text("Instructor demo") },
                                 )
-                                AssistChip(
+                                AppAssistChip(
                                     onClick = {
                                         onEmailChange("aprendiz1@ctma.edu.co")
                                         onPasswordChange("Aprendiz123!")
                                     },
+                                    icon = Icons.Filled.School,
                                     label = { Text("Aprendiz demo") },
                                 )
                             }
