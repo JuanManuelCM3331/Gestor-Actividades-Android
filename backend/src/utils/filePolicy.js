@@ -48,13 +48,85 @@ const ALLOWED_MIMES = new Set([
   'application/x-zip-compressed',
   'application/vnd.rar',
   'application/x-rar-compressed',
-  'application/octet-stream', // Validado junto con extensión estricta
+  'application/octet-stream', // Validado junto con extensión estricta y magic bytes
 ]);
 
 function ensureDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
+}
+
+/**
+ * SEC-04: Inspección de Magic Bytes (firma binaria) para detectar ejecutables o scripts
+ * camuflados con extensión permitida (ej. un .exe renombrado a .pdf o un script HTML/JS camuflado).
+ */
+function hasDangerousMagicBytes(filePath, ext) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(64);
+    const bytesRead = fs.readSync(fd, buffer, 0, 64, 0);
+    fs.closeSync(fd);
+
+    if (bytesRead === 0) return 'El archivo subido está vacío (0 bytes).';
+    const slice = buffer.subarray(0, bytesRead);
+
+    // 1. Ejecutables Windows PE/MZ (0x4D 0x5A = 'MZ')
+    if (bytesRead >= 2 && slice[0] === 0x4d && slice[1] === 0x5a) {
+      return 'Contenido ejecutable (PE/MZ) detectado y bloqueado por seguridad.';
+    }
+
+    // 2. Ejecutables Linux ELF (0x7F 'E' 'L' 'F')
+    if (
+      bytesRead >= 4 &&
+      slice[0] === 0x7f &&
+      slice[1] === 0x45 &&
+      slice[2] === 0x4c &&
+      slice[3] === 0x46
+    ) {
+      return 'Binario ejecutable (ELF) detectado y bloqueado por seguridad.';
+    }
+
+    // 3. Mach-O binarios
+    if (
+      bytesRead >= 4 &&
+      ((slice[0] === 0xfe && slice[1] === 0xed && slice[2] === 0xfa && (slice[3] === 0xce || slice[3] === 0xcf)) ||
+        (slice[0] === 0xcf && slice[1] === 0xfa && slice[2] === 0xed && slice[3] === 0xfe))
+    ) {
+      return 'Binario ejecutable (Mach-O) detectado y bloqueado por seguridad.';
+    }
+
+    // 4. Scripts ejecutables o payloads HTML/XSS camuflados en documentos/imágenes
+    const headAscii = slice.toString('utf8').trimStart().toLowerCase();
+    if (
+      headAscii.startsWith('#!/') ||
+      headAscii.startsWith('<?php') ||
+      headAscii.startsWith('<script') ||
+      (ext !== '.txt' && (headAscii.startsWith('<!doctype html') || headAscii.startsWith('<html')))
+    ) {
+      return 'Script o contenido HTML ejecutable camuflado bloqueado por seguridad.';
+    }
+
+    return null;
+  } catch (_err) {
+    return 'No se pudo verificar la integridad binaria del archivo.';
+  }
+}
+
+function validateUploadedFilesMagicBytes(subfolder, files) {
+  const list = Array.isArray(files) ? files : (files ? [files] : []);
+  for (const file of list) {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const fullPath = file.path || path.join(UPLOAD_ROOT, subfolder, path.basename(file.filename || ''));
+    const errorMsg = hasDangerousMagicBytes(fullPath, ext);
+    if (errorMsg) {
+      cleanupUploadedFiles(subfolder, list);
+      const err = new Error(`Tipo de archivo no permitido: ${errorMsg}`);
+      err.code = 'INVALID_FILE_TYPE';
+      return err;
+    }
+  }
+  return null;
 }
 
 function createMulterUpload(subfolder) {
@@ -73,7 +145,7 @@ function createMulterUpload(subfolder) {
     },
   });
 
-  return multer({
+  const baseMulter = multer({
     storage,
     limits: {
       fileSize: MAX_FILE_SIZE_BYTES,
@@ -92,6 +164,35 @@ function createMulterUpload(subfolder) {
       return cb(null, true);
     },
   });
+
+  return {
+    single(fieldName) {
+      const mw = baseMulter.single(fieldName);
+      return (req, res, next) => {
+        mw(req, res, (err) => {
+          if (err) return next(err);
+          if (req.file) {
+            const magicErr = validateUploadedFilesMagicBytes(subfolder, [req.file]);
+            if (magicErr) return next(magicErr);
+          }
+          return next();
+        });
+      };
+    },
+    array(fieldName, maxCount) {
+      const mw = baseMulter.array(fieldName, maxCount);
+      return (req, res, next) => {
+        mw(req, res, (err) => {
+          if (err) return next(err);
+          if (req.files && req.files.length > 0) {
+            const magicErr = validateUploadedFilesMagicBytes(subfolder, req.files);
+            if (magicErr) return next(magicErr);
+          }
+          return next();
+        });
+      };
+    },
+  };
 }
 
 function safeUnlink(subfolder, filename) {
@@ -118,4 +219,6 @@ module.exports = {
   createMulterUpload,
   safeUnlink,
   cleanupUploadedFiles,
+  hasDangerousMagicBytes,
+  validateUploadedFilesMagicBytes,
 };

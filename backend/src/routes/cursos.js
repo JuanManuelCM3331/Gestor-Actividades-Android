@@ -2,11 +2,19 @@ const express = require('express');
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { authenticate, requireRole, authorizeCourseAccess } = require('../middleware/auth');
+const { createRateLimiter } = require('../middleware/rateLimiter');
 const { calcularResumenCalificacion } = require('../utils/grades');
 const { safeUnlink } = require('../utils/filePolicy');
 
 const router = express.Router();
 router.use(authenticate);
+
+// SEC-03: Límite contra enumeración de códigos de acceso de 6 caracteres
+const joinCourseLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: 'Demasiados intentos con códigos de acceso. Espera unos minutos antes de volver a intentarlo.',
+});
 
 function generarCodigoAcceso() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -133,7 +141,7 @@ router.post('/', requireRole('INSTRUCTOR'), async (req, res, next) => {
   }
 });
 
-router.post('/unirse', requireRole('APRENDIZ'), async (req, res, next) => {
+router.post('/unirse', joinCourseLimiter, requireRole('APRENDIZ'), async (req, res, next) => {
   try {
     const codigoRaw = req.body?.codigo_acceso;
     if (!codigoRaw || typeof codigoRaw !== 'string' || codigoRaw.trim().length < 4) {

@@ -424,5 +424,45 @@ describe('API LMS CTMA - Roles, permisos, archivos, notas y foro privado', () =>
       token: aprendizBToken,
     });
     assert.equal(forbiddenAfterExpel.status, 403);
+
+    // SEC-02: Bloquea auto-registro como INSTRUCTOR con dominio no institucional
+    const fakeInst = await api('/api/auth/register', {
+      method: 'POST',
+      body: {
+        nombre: 'Intruso Docente',
+        email: `intruso_${suffix}@gmail.com`,
+        password: 'Password123',
+        rol: 'INSTRUCTOR',
+      },
+    });
+    assert.equal(fakeInst.status, 403);
+
+    // SEC-04: Bloquea ejecutable MZ camuflado como PDF mediante inspección de Magic Bytes
+    const fdDisguised = new FormData();
+    fdDisguised.append('tipo', 'PUBLICO');
+    fdDisguised.append('contenido', 'Intento subir ejecutable renombrado');
+    fdDisguised.append(
+      'archivos',
+      new Blob([Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00])], { type: 'application/pdf' }),
+      'falso_documento.pdf'
+    );
+    const disguisedRes = await api(`/api/foro/curso/${cursoId}/chat`, {
+      method: 'POST',
+      token: aprendizAToken,
+      formData: fdDisguised,
+    });
+    assert.equal(disguisedRes.status, 400);
+
+    // SEC-05: Revocación de sesión JWT al ejecutar logout
+    const logoutRes = await api('/api/auth/logout', {
+      method: 'POST',
+      token: aprendizBToken,
+    });
+    assert.equal(logoutRes.status, 204);
+
+    const meAfterLogout = await api('/api/auth/me', {
+      token: aprendizBToken,
+    });
+    assert.equal(meAfterLogout.status, 401);
   });
 });

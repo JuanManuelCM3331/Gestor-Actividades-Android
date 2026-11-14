@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool } = require('../config/db');
-const { authenticate, authorizeCourseAccess } = require('../middleware/auth');
+const { authenticate, authorizeCourseAccess, requireCourseAccessMiddleware } = require('../middleware/auth');
 const { createMulterUpload, cleanupUploadedFiles } = require('../utils/filePolicy');
 
 const router = express.Router();
@@ -49,6 +49,31 @@ function optionalMultipart(req, res, next) {
 function canAccessThread(hilo, curso, user) {
   if (hilo.tipo === 'PUBLICO') return true;
   return user.id === curso.instructor_id || user.id === hilo.aprendiz_objetivo_id;
+}
+
+// SEC-04: Autorizar acceso al hilo antes de que Multer procese adjuntos
+async function authorizeHiloPreUpload(req, res, next) {
+  try {
+    await ensureForoChatSchema();
+    const hiloId = Number(req.params.hiloId);
+    const [hilos] = await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]);
+    if (hilos.length === 0) {
+      return res.status(404).json({ error: 'Hilo no encontrado.' });
+    }
+    const hilo = hilos[0];
+    const access = await authorizeCourseAccess(hilo.curso_id, req.user);
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+    if (!canAccessThread(hilo, access.curso, req.user)) {
+      return res.status(403).json({ error: 'No tienes permiso para responder en este hilo privado.' });
+    }
+    req.hilo = hilo;
+    req.courseAccess = access;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 function normalizeUrl(raw) {
@@ -226,11 +251,15 @@ router.get('/curso/:cursoId/chat', async (req, res, next) => {
   }
 });
 
-router.post('/curso/:cursoId/chat', optionalMultipart, async (req, res, next) => {
+router.post(
+  '/curso/:cursoId/chat',
+  requireCourseAccessMiddleware('cursoId'),
+  optionalMultipart,
+  async (req, res, next) => {
   const uploadedFiles = req.files || [];
   try {
     await ensureForoChatSchema();
-    const access = await authorizeCourseAccess(req.params.cursoId, req.user);
+    const access = req.courseAccess || await authorizeCourseAccess(req.params.cursoId, req.user);
     if (access.error) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(access.status).json({ error: access.error });
@@ -442,19 +471,18 @@ router.get('/:hiloId/mensajes', async (req, res, next) => {
   }
 });
 
-router.post('/:hiloId/mensajes', optionalMultipart, async (req, res, next) => {
+router.post('/:hiloId/mensajes', authorizeHiloPreUpload, optionalMultipart, async (req, res, next) => {
   const uploadedFiles = req.files || [];
   try {
     await ensureForoChatSchema();
     const hiloId = Number(req.params.hiloId);
-    const [hilos] = await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]);
-    if (hilos.length === 0) {
+    const hilo = req.hilo || ((await pool.query('SELECT * FROM foro_hilos WHERE id = ?', [hiloId]))[0][0]);
+    if (!hilo) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(404).json({ error: 'Hilo no encontrado.' });
     }
-    const hilo = hilos[0];
 
-    const access = await authorizeCourseAccess(hilo.curso_id, req.user);
+    const access = req.courseAccess || await authorizeCourseAccess(hilo.curso_id, req.user);
     if (access.error) {
       cleanupUploadedFiles('foro', uploadedFiles);
       return res.status(access.status).json({ error: access.error });
