@@ -120,15 +120,21 @@ fun AppNavigation(
                         onAbrirMaterial = vm::abrirMaterial,
                         onCambiarModoForo = vm::cambiarModoForo,
                         onCambiarFiltroAprendizForo = vm::cambiarFiltroAprendizForo,
-                        onCrearHiloForo = vm::crearHiloForo,
-                        onAbrirHiloForo = { hiloId ->
-                            navController.navigate(AppRoutes.foroHilo(hiloId))
-                        },
+                        onChatTextoChange = vm::onChatTextoChange,
+                        onChatEnlaceChange = vm::onChatEnlaceChange,
+                        onAlternarCampoEnlaceChat = vm::alternarCampoEnlaceChat,
+                        onAgregarArchivoChatUri = vm::agregarArchivoChatUri,
+                        onAgregarAudioGrabadoChat = vm::agregarAudioGrabadoChat,
+                        onQuitarArchivoChat = vm::quitarArchivoChat,
+                        onEnviarMensajeChat = vm::enviarMensajeChat,
+                        onAbrirEnlaceExterno = vm::abrirEnlaceExterno,
+                        onDescargarArchivoEnCache = vm::descargarArchivoEnCache,
+                        onMostrarError = vm::mostrarError,
                         onExpulsarEstudiante = vm::expulsarEstudiante,
                         onSalirseDelCurso = {
                             vm.salirseDelCurso { navController.popBackStack() }
                         },
-                        onConvertir05A100 = vm::convertir05A100,
+                        onExportarCalificacionesExcel = vm::exportarCalificacionesExcel,
                         onLimpiarFeedback = vm::limpiarFeedback,
                     )
                 }

@@ -1,23 +1,65 @@
+# ==========================================
+# Android & Gradle
+# ==========================================
 *.iml
-.gradle
+.gradle/
+.kotlin/
 /local.properties
-/.idea/caches
-/.idea/libraries
+local.properties
+/build/
+/app/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# Binarios, paquetes y firmas
+*.apk
+*.aab
+*.ap_
+*.aab
+*.dex
+*.jks
+*.keystore
+
+# ==========================================
+# Android Studio / IntelliJ IDEA
+# ==========================================
+/.idea/caches/
+/.idea/libraries/
+/.idea/shelf/
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-
-.kotlin/
+/.idea/deploymentTargetSelector.xml
+/.idea/deviceManager.xml
+/.idea/androidTestResultsUserPreferences.xml
+/.idea/planningMode.xml
+/.idea/other.xml
 .idea/.name
-backend/node_modules/
-backend/.env
-backend/uploads/
-*.log
 
+# ==========================================
+# Backend (Node.js / Express) & Entorno
+# ==========================================
+node_modules/
+backend/node_modules/
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/uploads/
+
+# ==========================================
+# Logs, JVM Crash Dumps y Sistema Operativo
+# ==========================================
+*.log
+hs_err_pid*
+replay_pid*
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*~

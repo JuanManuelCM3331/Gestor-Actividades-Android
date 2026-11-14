@@ -252,7 +252,9 @@ data class MensajeForoDto(
     @SerialName("autor_id") val autorId: Int,
     @SerialName("autor_nombre") val autorNombre: String = "",
     @SerialName("autor_rol") val autorRol: String = "APRENDIZ",
-    val contenido: String,
+    val contenido: String = "",
+    @SerialName("enlace_url") val enlaceUrl: String? = null,
+    val archivos: List<ArchivoAdjuntoDto> = emptyList(),
     @SerialName("created_at") val createdAt: Long = 0L,
 )
 

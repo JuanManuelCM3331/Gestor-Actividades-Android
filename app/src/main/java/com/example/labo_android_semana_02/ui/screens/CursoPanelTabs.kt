@@ -6,17 +6,27 @@ import com.example.labo_android_semana_02.ui.components.AppFilterChip
 import com.example.labo_android_semana_02.ui.components.AppIconButton
 import com.example.labo_android_semana_02.ui.components.AppOutlinedButton
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
@@ -37,28 +47,30 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.labo_android_semana_02.ui.components.BarraCompositorChat
+import com.example.labo_android_semana_02.ui.components.BurbujaMensajeChat
 import com.example.labo_android_semana_02.ui.components.IconoTintado
 import com.example.labo_android_semana_02.ui.components.TituloConIcono
 import com.example.labo_android_semana_02.ui.components.colorParaTipoArchivo
@@ -66,11 +78,9 @@ import com.example.labo_android_semana_02.ui.theme.coloresExtendidos
 import com.example.labo_android_semana_02.domain.model.Actividad
 import com.example.labo_android_semana_02.domain.model.ArchivoAdjunto
 import com.example.labo_android_semana_02.domain.model.EstadoEntrega
-import com.example.labo_android_semana_02.domain.model.HiloForo
 import com.example.labo_android_semana_02.domain.model.MaterialApoyo
 import com.example.labo_android_semana_02.domain.model.PersonaCurso
 import com.example.labo_android_semana_02.domain.model.RolUsuario
-import com.example.labo_android_semana_02.domain.model.TipoHiloForo
 import com.example.labo_android_semana_02.domain.model.TipoMaterial
 import com.example.labo_android_semana_02.ui.components.DialogoConfirmacion
 import com.example.labo_android_semana_02.ui.components.EstadoEntregaChip
@@ -78,6 +88,7 @@ import com.example.labo_android_semana_02.ui.components.EstadoVacioTarjeta
 import com.example.labo_android_semana_02.ui.components.UiFormatters
 import com.example.labo_android_semana_02.ui.components.WrapRow
 import com.example.labo_android_semana_02.ui.viewmodel.CursoPanelUiState
+import java.io.File
 
 @Composable
 fun TabActividadesContenido(
@@ -412,147 +423,178 @@ fun TabForoContenido(
     esInstructor: Boolean,
     onCambiarModoForo: (Boolean) -> Unit,
     onCambiarFiltroAprendiz: (Int?) -> Unit,
-    onNuevoHilo: () -> Unit,
-    onAbrirHilo: (Int) -> Unit,
+    onChatTextoChange: (String) -> Unit,
+    onChatEnlaceChange: (String) -> Unit,
+    onAlternarCampoEnlaceChat: () -> Unit,
+    onAgregarArchivoChatUri: (Uri) -> Unit,
+    onAgregarAudioGrabadoChat: (File) -> Unit,
+    onQuitarArchivoChat: (Int) -> Unit,
+    onEnviarMensajeChat: () -> Unit,
+    onAbrirAdjunto: (ArchivoAdjunto) -> Unit,
+    onAbrirEnlace: (String) -> Unit,
+    onDescargarEnCache: suspend (ArchivoAdjunto) -> Result<File>,
+    onMostrarError: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val hilos = if (state.modoForoPrivado) state.hilosPrivados else state.hilosPublicos
+    val mensajes = if (state.modoForoPrivado) state.mensajesChatPrivado else state.mensajesChatPublico
+    val aprendices = state.personas?.aprendices.orEmpty()
+    val aprendizSeleccionado = aprendices.firstOrNull { it.id == state.filtroAprendizForoId }
+    val listState = rememberLazyListState()
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            AppFilterChip(
-                selected = !state.modoForoPrivado,
-                onClick = { onCambiarModoForo(false) },
-                icon = Icons.Default.Public,
-                label = { Text("Foro público") },
-                modifier = Modifier.weight(1f),
-            )
-            AppFilterChip(
-                selected = state.modoForoPrivado,
-                onClick = { onCambiarModoForo(true) },
-                icon = Icons.Default.Lock,
-                label = { Text("Foro privado 1 a 1") },
-                modifier = Modifier.weight(1f),
-            )
+    LaunchedEffect(mensajes.size, state.modoForoPrivado, state.filtroAprendizForoId) {
+        if (mensajes.isNotEmpty()) {
+            listState.animateScrollToItem(mensajes.lastIndex)
         }
+    }
 
-        if (state.modoForoPrivado && esInstructor) {
-            val aprendices = state.personas?.aprendices.orEmpty()
-            if (aprendices.isNotEmpty()) {
-                Text("Filtrar conversación por aprendiz:", style = MaterialTheme.typography.labelMedium)
-                WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
-                    AppFilterChip(
-                        selected = state.filtroAprendizForoId == null,
-                        onClick = { onCambiarFiltroAprendiz(null) },
-                        label = { Text("Todos") },
-                    )
-                    aprendices.forEach { est ->
-                        AppFilterChip(
-                            selected = state.filtroAprendizForoId == est.id,
-                            onClick = { onCambiarFiltroAprendiz(est.id) },
-                            icon = Icons.Default.Person,
-                            label = { Text(est.nombre) },
+    val puedeChatear = !state.modoForoPrivado || !esInstructor || state.filtroAprendizForoId != null
+
+    Column(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AppFilterChip(
+                    selected = !state.modoForoPrivado,
+                    onClick = { onCambiarModoForo(false) },
+                    icon = Icons.Default.Public,
+                    label = { Text("Chat grupal", maxLines = 1) },
+                    modifier = Modifier.weight(1f),
+                )
+                AppFilterChip(
+                    selected = state.modoForoPrivado,
+                    onClick = { onCambiarModoForo(true) },
+                    icon = Icons.Default.Lock,
+                    label = { Text("Chat privado", maxLines = 1) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (state.modoForoPrivado) {
+                if (esInstructor) {
+                    if (aprendices.isNotEmpty()) {
+                        Text(
+                            text = "Conversación privada con aprendiz:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        WrapRow(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
+                            aprendices.forEach { est ->
+                                AppFilterChip(
+                                    selected = state.filtroAprendizForoId == est.id,
+                                    onClick = { onCambiarFiltroAprendiz(est.id) },
+                                    icon = Icons.Default.Person,
+                                    label = { Text(est.nombre) },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text = "Chat privado 1 a 1 con ${state.curso?.instructorNombre ?: "tu instructor"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        }
                     }
                 }
             }
         }
 
-        AppButton(onClick = onNuevoHilo, icon = Icons.Default.Add, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                if (state.modoForoPrivado) "Nuevo mensaje privado" else "Nuevo tema público"
-            )
-        }
-
-        if (hilos.isEmpty() && !state.cargando) {
-            EstadoVacioTarjeta(
-                icono = if (state.modoForoPrivado) Icons.Default.Lock else Icons.Default.Public,
-                titulo = if (state.modoForoPrivado) "Sin conversaciones privadas" else "Foro público sin temas",
-                descripcion = if (state.modoForoPrivado) {
-                    "Las conversaciones privadas solo son visibles entre el instructor y el aprendiz destinatario."
-                } else {
-                    "Publica un hilo para compartir dudas o anuncios con todo el curso."
-                },
-            )
-        }
-
-        hilos.forEach { hilo ->
-            TarjetaHiloForo(hilo = hilo, onClick = { onAbrirHilo(hilo.id) })
-        }
-    }
-}
-
-@Composable
-private fun TarjetaHiloForo(hilo: HiloForo, onClick: () -> Unit) {
-    val privado = hilo.tipo == TipoHiloForo.PRIVADO
-    val acento = if (privado) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, acento.copy(alpha = 0.30f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Column(
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconoTintado(
-                    icono = if (privado) Icons.Default.Lock else Icons.Default.Public,
-                    color = acento,
-                    tamano = 40.dp,
-                    circular = true,
-                )
-                Text(
-                    text = hilo.titulo,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Surface(
-                    color = if (privado) {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.primaryContainer
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(
-                        text = if (privado) "Privado 1:1" else "Público",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (privado) MaterialTheme.colorScheme.onTertiaryContainer
-                        else MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            if (state.modoForoPrivado && esInstructor && aprendices.isEmpty() && !state.cargando) {
+                item {
+                    EstadoVacioTarjeta(
+                        icono = Icons.Default.Lock,
+                        titulo = "Sin aprendices inscritos",
+                        descripcion = "Cuando los aprendices se unan al curso con el código de acceso podrás chatear 1 a 1 con cada uno.",
+                    )
+                }
+            } else if (mensajes.isEmpty() && !state.cargando) {
+                item {
+                    EstadoVacioTarjeta(
+                        icono = if (state.modoForoPrivado) Icons.Default.Lock else Icons.Default.Public,
+                        titulo = if (state.modoForoPrivado) {
+                            if (esInstructor && aprendizSeleccionado != null) {
+                                "Inicia el chat con ${aprendizSeleccionado.nombre}"
+                            } else {
+                                "Sin mensajes privados aún"
+                            }
+                        } else {
+                            "El chat grupal está listo"
+                        },
+                        descripcion = "Escribe en la barra inferior o adjunta imágenes, archivos, notas de voz, audios o enlaces URL.",
                     )
                 }
             }
-            Text(
-                text = hilo.contenido,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            val contextoPrivado = if (hilo.tipo == TipoHiloForo.PRIVADO && hilo.aprendizObjetivoNombre != null) {
-                " • Con: ${hilo.aprendizObjetivoNombre}"
-            } else {
-                ""
+
+            items(mensajes, key = { it.id }) { msg ->
+                BurbujaMensajeChat(
+                    mensaje = msg,
+                    esMio = msg.autorId == state.usuario?.id,
+                    onAbrirAdjunto = onAbrirAdjunto,
+                    onAbrirEnlace = onAbrirEnlace,
+                    onDescargarEnCache = onDescargarEnCache,
+                )
             }
-            Text(
-                text = "Por ${hilo.autorNombre} (${if (hilo.autorRol == RolUsuario.INSTRUCTOR) "Instructor" else "Aprendiz"})$contextoPrivado • ${hilo.totalMensajes} respuestas",
-                style = MaterialTheme.typography.labelSmall,
-                color = acento,
-            )
         }
+
+        BarraCompositorChat(
+            texto = state.chatTexto,
+            onTextoChange = onChatTextoChange,
+            enlaceUrl = state.chatEnlaceUrl,
+            mostrarCampoEnlace = state.mostrarCampoEnlaceChat,
+            onEnlaceChange = onChatEnlaceChange,
+            onAlternarCampoEnlace = onAlternarCampoEnlaceChat,
+            archivosPendientes = state.chatArchivosPendientes,
+            onAgregarUri = onAgregarArchivoChatUri,
+            onAgregarAudioGrabado = onAgregarAudioGrabadoChat,
+            onQuitarArchivo = onQuitarArchivoChat,
+            onEnviar = onEnviarMensajeChat,
+            onErrorPermisoAudio = onMostrarError,
+            enviando = state.enviandoMensajeChat,
+            habilitado = puedeChatear,
+            placeholder = when {
+                !puedeChatear -> "Selecciona un aprendiz para chatear..."
+                state.modoForoPrivado && esInstructor && aprendizSeleccionado != null ->
+                    "Mensaje privado para ${aprendizSeleccionado.nombre}..."
+                state.modoForoPrivado -> "Escribe un mensaje privado al instructor..."
+                else -> "Escribe un mensaje para todo el curso..."
+            },
+        )
     }
 }
 
@@ -560,7 +602,6 @@ private fun TarjetaHiloForo(hilo: HiloForo, onClick: () -> Unit) {
 fun TabPersonasContenido(
     state: CursoPanelUiState,
     esInstructor: Boolean,
-    convertir05A100: (Double) -> Double,
     onExpulsarEstudiante: (Int) -> Unit,
     onSalirseDelCurso: () -> Unit,
 ) {
@@ -568,9 +609,6 @@ fun TabPersonasContenido(
     var confirmarSalida by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Conversor rápido de escala 0-5 a 0-100
-        ConversorEscalaCard(convertir05A100 = convertir05A100)
-
         state.personas?.instructor?.let { inst ->
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -693,41 +731,296 @@ fun TabPersonasContenido(
 }
 
 @Composable
-private fun ConversorEscalaCard(convertir05A100: (Double) -> Double) {
-    var valorSlider by remember { mutableFloatStateOf(3.5f) }
-    val nota05 = ((valorSlider * 10f).toInt() / 10.0)
-    val nota0100 = convertir05A100(nota05)
+fun TabNotasContenido(
+    state: CursoPanelUiState,
+    onExportarExcel: () -> Unit,
+) {
+    val c = MaterialTheme.coloresExtendidos
+    val calificaciones = if (state.calificacionesCurso.isNotEmpty()) {
+        state.calificacionesCurso
+    } else {
+        listOfNotNull(state.miCalificacion)
+    }
+    val actividades = state.actividades
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.30f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             TituloConIcono(
-                texto = "Conversor de escala (0.0–5.0  ⇄  0–100)",
-                icono = Icons.Default.SwapHoriz,
-                color = MaterialTheme.colorScheme.tertiary,
+                texto = "Calificaciones (${calificaciones.size})",
+                icono = Icons.Default.Grade,
+                color = c.exito,
+                modifier = Modifier.weight(1f),
             )
-            Slider(
-                value = valorSlider,
-                onValueChange = { valorSlider = it },
-                valueRange = 0f..5f,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.tertiary,
-                    activeTrackColor = MaterialTheme.colorScheme.tertiary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f),
-                ),
+            AppButton(
+                onClick = onExportarExcel,
+                enabled = calificaciones.isNotEmpty() && !state.procesandoArchivo,
+                icon = Icons.Default.TableChart,
+            ) {
+                Text("Exportar Excel")
+            }
+        }
+
+        if (calificaciones.isEmpty() && !state.cargando) {
+            EstadoVacioTarjeta(
+                icono = Icons.Default.Grade,
+                titulo = "Sin calificaciones aún",
+                descripcion = "Cuando haya aprendices inscritos en el curso, aquí aparecerá la tabla completa de notas por actividad y el promedio total.",
             )
-            Text(
-                text = "${UiFormatters.formatearNota(nota05)} / 5.0  =  ${UiFormatters.formatearNota(nota0100)} / 100",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-            )
+        } else if (calificaciones.isNotEmpty()) {
+            val scrollHorizontal = rememberScrollState()
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = c.superficieTarjeta),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(scrollHorizontal),
+                ) {
+                    // Encabezado de la tabla
+                    Row(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CeldaEncabezadoTabla(texto = "N°", ancho = 38.dp, textAlign = TextAlign.Center)
+                        CeldaEncabezadoTabla(texto = "Integrante", ancho = 175.dp)
+                        actividades.forEach { act ->
+                            val escalaStr = if (act.puntajeMaximo >= 100.0) "100 pts" else "5.0 pts"
+                            CeldaEncabezadoTabla(
+                                texto = "${act.titulo}\n($escalaStr)",
+                                ancho = 128.dp,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        CeldaEncabezadoTabla(
+                            texto = "Total\n(0.0 - 5.0)",
+                            ancho = 102.dp,
+                            textAlign = TextAlign.Center,
+                        )
+                        CeldaEncabezadoTabla(
+                            texto = "Total\n(0 - 100)",
+                            ancho = 102.dp,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+
+                    // Filas de cada aprendiz
+                    calificaciones.forEachIndexed { idx, res ->
+                        val esUsuarioActual = res.aprendiz?.id != null && res.aprendiz.id == state.usuario?.id
+                        val fondoFila = when {
+                            esUsuarioActual -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                            idx % 2 == 1 -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            else -> Color.Transparent
+                        }
+                        val mapaDetalle = res.detalle.associateBy { it.actividadId }
+
+                        Row(
+                            modifier = Modifier
+                                .background(fondoFila)
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${idx + 1}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(38.dp),
+                            )
+
+                            Column(
+                                modifier = Modifier
+                                    .width(175.dp)
+                                    .padding(horizontal = 6.dp),
+                            ) {
+                                Text(
+                                    text = res.aprendiz?.nombre ?: "Aprendiz ${idx + 1}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (esUsuarioActual) FontWeight.Bold else FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                res.aprendiz?.email?.takeIf { it.isNotBlank() }?.let { correo ->
+                                    Text(
+                                        text = correo,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+
+                            actividades.forEach { act ->
+                                val det = mapaDetalle[act.id]
+                                Box(
+                                    modifier = Modifier
+                                        .width(128.dp)
+                                        .padding(horizontal = 4.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    when {
+                                        det?.exenta == true -> {
+                                            Surface(
+                                                color = c.especialContenedor,
+                                                shape = RoundedCornerShape(8.dp),
+                                            ) {
+                                                Text(
+                                                    text = "Exenta",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = c.especial,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                )
+                                            }
+                                        }
+                                        det?.nota != null -> {
+                                            val maxFmt = if (act.puntajeMaximo >= 100.0) "100" else "5.0"
+                                            val aprobado = (det.nota / act.puntajeMaximo) >= 0.6
+                                            val colorNota = if (aprobado) c.exito else MaterialTheme.colorScheme.error
+                                            Text(
+                                                text = "${UiFormatters.formatearNota(det.nota)} / $maxFmt",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = colorNota,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
+                                        else -> {
+                                            Text(
+                                                text = "0.00 (Pend.)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = c.advertencia,
+                                                textAlign = TextAlign.Center,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            val aprobadoFinal = res.nota05 >= 3.0
+                            val colorTotal = if (aprobadoFinal) c.exito else MaterialTheme.colorScheme.error
+
+                            Box(
+                                modifier = Modifier
+                                    .width(102.dp)
+                                    .padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Surface(
+                                    color = colorTotal.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, colorTotal.copy(alpha = 0.4f)),
+                                ) {
+                                    Text(
+                                        text = "${UiFormatters.formatearNota(res.nota05)} / 5.0",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colorTotal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(102.dp)
+                                    .padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Surface(
+                                    color = colorTotal.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, colorTotal.copy(alpha = 0.4f)),
+                                ) {
+                                    Text(
+                                        text = "${UiFormatters.formatearNota(res.nota0100)} / 100",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colorTotal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
+
+                    // Fila resumen de promedio grupal
+                    val prom05 = calificaciones.map { it.nota05 }.average()
+                    val prom100 = calificaciones.map { it.nota0100 }.average()
+                    Row(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f))
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Spacer(modifier = Modifier.width(38.dp))
+                        Text(
+                            text = "Promedio del grupo",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier
+                                .width(175.dp)
+                                .padding(horizontal = 6.dp),
+                        )
+                        repeat(actividades.size) {
+                            Spacer(modifier = Modifier.width(128.dp))
+                        }
+                        Text(
+                            text = "${UiFormatters.formatearNota(prom05)} / 5.0",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.width(102.dp),
+                        )
+                        Text(
+                            text = "${UiFormatters.formatearNota(prom100)} / 100",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.width(102.dp),
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun CeldaEncabezadoTabla(
+    texto: String,
+    ancho: androidx.compose.ui.unit.Dp,
+    textAlign: TextAlign = TextAlign.Start,
+) {
+    Text(
+        text = texto,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
+        textAlign = textAlign,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .width(ancho)
+            .padding(horizontal = 6.dp),
+    )
 }
 
 @Composable

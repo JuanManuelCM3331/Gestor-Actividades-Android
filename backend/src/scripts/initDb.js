@@ -114,12 +114,13 @@ async function seedDemoData(connection) {
   );
 
   await connection.query(
-    `INSERT INTO foro_mensajes (hilo_id, autor_id, contenido, created_at)
-     VALUES (?, ?, ?, ?)`,
+    `INSERT INTO foro_mensajes (hilo_id, autor_id, contenido, enlace_url, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
     [
       hiloPubRes.insertId,
       aprendiz1Id,
-      '¡Muchas gracias instructora! Ya revisé el Taller 1.',
+      '¡Muchas gracias instructora! Ya revisé el Taller 1 y les comparto la documentación oficial de MySQL.',
+      'https://dev.mysql.com/doc/',
       now + 1000,
     ]
   );

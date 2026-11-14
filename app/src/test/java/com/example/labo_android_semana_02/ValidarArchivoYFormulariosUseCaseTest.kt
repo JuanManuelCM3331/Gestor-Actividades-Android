@@ -1,8 +1,17 @@
 package com.example.labo_android_semana_02
 
+import com.example.labo_android_semana_02.domain.model.Actividad
 import com.example.labo_android_semana_02.domain.model.ArchivoLocal
+import com.example.labo_android_semana_02.domain.model.DetalleCalificacionActividad
+import com.example.labo_android_semana_02.domain.model.EstadoEntrega
+import com.example.labo_android_semana_02.domain.model.ResumenCalificacionEstudiante
+import com.example.labo_android_semana_02.domain.model.RolUsuario
+import com.example.labo_android_semana_02.domain.model.Usuario
+import com.example.labo_android_semana_02.domain.usecase.GenerarExcelCalificacionesUseCase
 import com.example.labo_android_semana_02.domain.usecase.ValidarArchivoUseCase
 import com.example.labo_android_semana_02.domain.usecase.ValidarFormulariosUseCase
+import java.io.ByteArrayInputStream
+import java.util.zip.ZipInputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -30,6 +39,12 @@ class ValidarArchivoYFormulariosUseCaseTest {
 
         val vacio = ArchivoLocal("content://4", "notas.txt", "text/plain", 0L)
         assertFalse(validarArchivo(vacio).esValido)
+
+        val audioGrabado = ArchivoLocal("file:///cache/nota_voz_123.m4a", "nota_voz_123.m4a", "audio/mp4", 48_000L)
+        assertTrue(validarArchivo(audioGrabado).esValido)
+
+        val audioOgg = ArchivoLocal("content://5", "mensaje.ogg", "audio/ogg", 64_000L)
+        assertTrue(validarArchivo(audioOgg).esValido)
     }
 
     @Test
@@ -62,5 +77,141 @@ class ValidarArchivoYFormulariosUseCaseTest {
             aprendizObjetivoId = null,
         )
         assertEquals("Selecciona el aprendiz para iniciar la conversación privada.", errorPrivadoSinTarget)
+
+        // Validación del nuevo chat convencional del foro
+        assertNotNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "   ",
+                enlaceUrl = "",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
+        assertNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "",
+                enlaceUrl = "https://kotlinlang.org",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
+        assertNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "",
+                enlaceUrl = "",
+                cantidadArchivos = 1,
+                esPrivado = true,
+                esInstructor = true,
+                aprendizObjetivoId = 2,
+            ),
+        )
+        assertNotNull(
+            validarFormularios.validarMensajeChatForo(
+                contenido = "Hola",
+                enlaceUrl = "ftp://invalido",
+                cantidadArchivos = 0,
+                esPrivado = false,
+                esInstructor = false,
+                aprendizObjetivoId = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `genera archivo Excel xlsx valido con actividades aprendices y totales`() {
+        val generador = GenerarExcelCalificacionesUseCase()
+        val actividades = listOf(
+            Actividad(
+                id = 10,
+                cursoId = 1,
+                titulo = "Taller Kotlin",
+                descripcion = "Funciones y clases",
+                fechaLimite = 1_700_000_000_000L,
+                puntajeMaximo = 5.0,
+                adjuntos = emptyList(),
+                totalEntregas = 1,
+                porCalificar = 0,
+                estadoAprendiz = null,
+                miEntrega = null,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+            Actividad(
+                id = 11,
+                cursoId = 1,
+                titulo = "Proyecto Compose",
+                descripcion = "UI reactiva",
+                fechaLimite = 1_700_000_000_000L,
+                puntajeMaximo = 100.0,
+                adjuntos = emptyList(),
+                totalEntregas = 1,
+                porCalificar = 0,
+                estadoAprendiz = null,
+                miEntrega = null,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        val calificaciones = listOf(
+            ResumenCalificacionEstudiante(
+                aprendiz = Usuario(2, "Laura Gómez", "laura@ctma.edu.co", RolUsuario.APRENDIZ),
+                nota05 = 4.5,
+                nota0100 = 90.0,
+                totalActividades = 2,
+                actividadesEvaluables = 2,
+                actividadesCalificadas = 2,
+                actividadesExentas = 0,
+                detalle = listOf(
+                    DetalleCalificacionActividad(
+                        actividadId = 10,
+                        titulo = "Taller Kotlin",
+                        puntajeMaximo = 5.0,
+                        nota = 4.5,
+                        notaEscala05 = 4.5,
+                        estado = EstadoEntrega.CALIFICADA,
+                        exenta = false,
+                        retroalimentacion = "Excelente",
+                    ),
+                    DetalleCalificacionActividad(
+                        actividadId = 11,
+                        titulo = "Proyecto Compose",
+                        puntajeMaximo = 100.0,
+                        nota = 90.0,
+                        notaEscala05 = 4.5,
+                        estado = EstadoEntrega.CALIFICADA,
+                        exenta = false,
+                        retroalimentacion = "Muy bien",
+                    ),
+                ),
+            ),
+        )
+
+        val bytes = generador(
+            cursoNombre = "Desarrollo Móvil Android",
+            instructorNombre = "Carlos Pérez",
+            actividades = actividades,
+            calificaciones = calificaciones,
+        )
+        assertTrue(bytes.isNotEmpty())
+
+        val entradas = mutableMapOf<String, String>()
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                entradas[entry.name] = zis.readBytes().toString(Charsets.UTF_8)
+                entry = zis.nextEntry
+            }
+        }
+        assertTrue(entradas.containsKey("xl/workbook.xml"))
+        assertTrue(entradas.containsKey("xl/worksheets/sheet1.xml"))
+        val sheetXml = entradas.getValue("xl/worksheets/sheet1.xml")
+        assertTrue(sheetXml.contains("Laura Gómez"))
+        assertTrue(sheetXml.contains("Taller Kotlin (/5.0)"))
+        assertTrue(sheetXml.contains("Proyecto Compose (/100)"))
+        assertTrue(sheetXml.contains("90.00"))
     }
 }

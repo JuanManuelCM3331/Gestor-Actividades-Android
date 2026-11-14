@@ -111,4 +111,25 @@ class ValidarFormulariosUseCase {
         }
         return null
     }
+
+    fun validarMensajeChatForo(
+        contenido: String,
+        enlaceUrl: String,
+        cantidadArchivos: Int,
+        esPrivado: Boolean,
+        esInstructor: Boolean,
+        aprendizObjetivoId: Int?,
+    ): String? {
+        if (esPrivado && esInstructor && aprendizObjetivoId == null) {
+            return "Selecciona un aprendiz para enviarle un mensaje privado."
+        }
+        val cleanUrl = enlaceUrl.trim()
+        if (cleanUrl.isNotEmpty() && !urlRegex.matches(cleanUrl)) {
+            return "Ingresa un enlace válido que comience con http:// o https://"
+        }
+        if (contenido.trim().isEmpty() && cleanUrl.isEmpty() && cantidadArchivos <= 0) {
+            return "Escribe un mensaje, comparte un enlace o adjunta un archivo, audio o imagen."
+        }
+        return null
+    }
 }

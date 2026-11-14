@@ -105,6 +105,19 @@ interface MaterialRepository {
 }
 
 interface ForoRepository {
+    suspend fun listarMensajesChat(
+        cursoId: Int,
+        tipo: TipoHiloForo,
+        aprendizId: Int? = null,
+    ): Result<List<MensajeForo>>
+    suspend fun enviarMensajeChat(
+        cursoId: Int,
+        tipo: TipoHiloForo,
+        contenido: String,
+        enlaceUrl: String? = null,
+        aprendizObjetivoId: Int? = null,
+        archivos: List<ArchivoLocal> = emptyList(),
+    ): Result<MensajeForo>
     suspend fun listarHilos(
         cursoId: Int,
         tipo: TipoHiloForo,
@@ -118,5 +131,10 @@ interface ForoRepository {
         aprendizObjetivoId: Int? = null,
     ): Result<HiloForo>
     suspend fun obtenerDetalleHilo(hiloId: Int): Result<HiloForoDetalle>
-    suspend fun responderHilo(hiloId: Int, contenido: String): Result<MensajeForo>
+    suspend fun responderHilo(
+        hiloId: Int,
+        contenido: String,
+        enlaceUrl: String? = null,
+        archivos: List<ArchivoLocal> = emptyList(),
+    ): Result<MensajeForo>
 }

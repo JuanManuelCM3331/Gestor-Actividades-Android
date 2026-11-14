@@ -195,6 +195,8 @@ data class MensajeForo(
     val autorNombre: String,
     val autorRol: RolUsuario,
     val contenido: String,
+    val enlaceUrl: String? = null,
+    val archivos: List<ArchivoAdjunto> = emptyList(),
     val createdAt: Long,
 )
 

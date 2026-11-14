@@ -398,7 +398,7 @@ router.get('/:cursoId/calificaciones', async (req, res, next) => {
     const access = await authorizeCourseAccess(req.params.cursoId, req.user);
     if (access.error) return res.status(access.status).json({ error: access.error });
 
-    if (req.user.rol === 'APRENDIZ') {
+    if (req.user.rol === 'APRENDIZ' && req.query.tabla !== '1') {
       const resumen = await calcularResumenCursoEstudiante(access.curso.id, req.user.id);
       return res.json({
         aprendiz: { id: req.user.id, nombre: req.user.nombre, email: req.user.email },

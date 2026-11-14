@@ -19,7 +19,7 @@ class ValidarArchivoUseCase {
         val EXTENSIONES_PERMITIDAS = setOf(
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv",
             "jpg", "jpeg", "png", "webp", "gif",
-            "mp3", "wav", "m4a", "mp4", "webm",
+            "mp3", "wav", "m4a", "aac", "ogg", "opus", "3gp", "amr", "mp4", "webm",
             "zip", "rar",
         )
     }

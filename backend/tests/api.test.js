@@ -357,6 +357,62 @@ describe('API LMS CTMA - Roles, permisos, archivos, notas y foro privado', () =>
     });
     assert.equal(instReply.status, 201);
 
+    // Nuevo flujo de chat convencional (público + privado 1 a 1 con multimedia y URL)
+    const fdChatPub = new FormData();
+    fdChatPub.append('tipo', 'PUBLICO');
+    fdChatPub.append('contenido', 'Hola a todos, comparto nota de voz y enlace');
+    fdChatPub.append('enlace_url', 'https://developer.android.com');
+    fdChatPub.append('archivos', new Blob(['audio-data'], { type: 'audio/mp4' }), 'nota_voz.m4a');
+
+    const chatPubSent = await api(`/api/foro/curso/${cursoId}/chat`, {
+      method: 'POST',
+      token: aprendizAToken,
+      formData: fdChatPub,
+    });
+    assert.equal(chatPubSent.status, 201);
+    assert.equal(chatPubSent.data.enlace_url, 'https://developer.android.com');
+    assert.equal(chatPubSent.data.archivos.length, 1);
+
+    const chatPubList = await api(`/api/foro/curso/${cursoId}/chat?tipo=PUBLICO`, {
+      token: aprendizBToken,
+    });
+    assert.equal(chatPubList.status, 200);
+    assert.ok(chatPubList.data.some((m) => m.id === chatPubSent.data.id));
+
+    // Chat privado 1 a 1: Aprendiz B no puede leer el chat privado de Aprendiz A
+    const snoopChatPriv = await api(`/api/foro/curso/${cursoId}/chat?tipo=PRIVADO&aprendizId=${aprendizAId}`, {
+      token: aprendizBToken,
+    });
+    assert.equal(snoopChatPriv.status, 403);
+
+    // Instructor envía mensaje privado con archivo a Aprendiz A
+    const fdChatPriv = new FormData();
+    fdChatPriv.append('tipo', 'PRIVADO');
+    fdChatPriv.append('aprendiz_objetivo_id', String(aprendizAId));
+    fdChatPriv.append('contenido', 'Te envío retroalimentación en imagen');
+    fdChatPriv.append('archivos', new Blob(['png-bytes'], { type: 'image/png' }), 'captura.png');
+
+    const chatPrivSent = await api(`/api/foro/curso/${cursoId}/chat`, {
+      method: 'POST',
+      token: instructorToken,
+      formData: fdChatPriv,
+    });
+    assert.equal(chatPrivSent.status, 201);
+    assert.equal(chatPrivSent.data.archivos.length, 1);
+    const privArchivoId = chatPrivSent.data.archivos[0].id;
+
+    // Aprendiz B no puede descargar adjunto privado de Aprendiz A
+    const snoopFile = await api(`/api/archivos/foro/${privArchivoId}`, {
+      token: aprendizBToken,
+    });
+    assert.equal(snoopFile.status, 403);
+
+    // Aprendiz A sí puede descargar su adjunto privado
+    const okFile = await api(`/api/archivos/foro/${privArchivoId}`, {
+      token: aprendizAToken,
+    });
+    assert.equal(okFile.status, 200);
+
     // Expulsar a Aprendiz B => luego pierde acceso al curso (403)
     const expelB = await api(`/api/cursos/${cursoId}/personas/${aprendizBId}`, {
       method: 'DELETE',
