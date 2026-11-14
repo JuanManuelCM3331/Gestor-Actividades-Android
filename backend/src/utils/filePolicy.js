@@ -10,7 +10,7 @@ const ALLOWED_EXTENSIONS = new Set([
   // Imágenes
   '.jpg', '.jpeg', '.png', '.webp', '.gif',
   // Audio y video
-  '.mp3', '.wav', '.m4a', '.mp4', '.webm',
+  '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.3gp', '.amr', '.mp4', '.webm',
   // Comprimidos
   '.zip', '.rar',
 ]);
@@ -35,6 +35,13 @@ const ALLOWED_MIMES = new Set([
   'audio/x-wav',
   'audio/mp4',
   'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/ogg',
+  'audio/opus',
+  'audio/3gpp',
+  'audio/amr',
+  'video/3gpp',
   'video/mp4',
   'video/webm',
   'application/zip',

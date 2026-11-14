@@ -176,12 +176,13 @@ CREATE TABLE foro_hilos (
   INDEX idx_foro_curso_tipo (curso_id, tipo, aprendiz_objetivo_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 10. Respuestas dentro de un hilo de foro
+-- 10. Mensajes dentro de un canal/hilo de foro (chat grupal o privado 1 a 1)
 CREATE TABLE foro_mensajes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   hilo_id INT NOT NULL,
   autor_id INT NOT NULL,
   contenido TEXT NOT NULL,
+  enlace_url VARCHAR(512) NULL,
   created_at BIGINT NOT NULL,
   CONSTRAINT fk_mensaje_hilo
     FOREIGN KEY (hilo_id) REFERENCES foro_hilos(id)
@@ -192,4 +193,20 @@ CREATE TABLE foro_mensajes (
     ON UPDATE CASCADE
     ON DELETE CASCADE,
   INDEX idx_mensaje_hilo (hilo_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. Archivos multimedia adjuntos en mensajes del foro (imágenes, audios, documentos)
+CREATE TABLE foro_archivos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  mensaje_id INT NOT NULL,
+  nombre_original VARCHAR(255) NOT NULL,
+  nombre_archivo VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(140) NOT NULL,
+  tamano_bytes BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  CONSTRAINT fk_foro_archivos_mensaje
+    FOREIGN KEY (mensaje_id) REFERENCES foro_mensajes(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
+  INDEX idx_foro_archivos_mensaje (mensaje_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

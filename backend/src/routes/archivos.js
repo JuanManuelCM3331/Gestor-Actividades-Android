@@ -67,6 +67,29 @@ router.get('/:tipo/:id', async (req, res, next) => {
       return sendSafeFile(res, 'entregas', rows[0].nombre_archivo, rows[0].nombre_original, rows[0].mime_type);
     }
 
+    if (tipo === 'foro') {
+      const [rows] = await pool.query(
+        `SELECT fa.*, h.curso_id, h.tipo AS hilo_tipo, h.aprendiz_objetivo_id
+         FROM foro_archivos fa
+         INNER JOIN foro_mensajes m ON m.id = fa.mensaje_id
+         INNER JOIN foro_hilos h ON h.id = m.hilo_id
+         WHERE fa.id = ?`,
+        [id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: 'Archivo del foro no encontrado.' });
+      const row = rows[0];
+      const access = await authorizeCourseAccess(row.curso_id, req.user);
+      if (access.error) return res.status(access.status).json({ error: access.error });
+      if (
+        row.hilo_tipo === 'PRIVADO' &&
+        req.user.id !== access.curso.instructor_id &&
+        req.user.id !== row.aprendiz_objetivo_id
+      ) {
+        return res.status(403).json({ error: 'No tienes permiso para acceder a archivos de este chat privado.' });
+      }
+      return sendSafeFile(res, 'foro', row.nombre_archivo, row.nombre_original, row.mime_type);
+    }
+
     return res.status(400).json({ error: 'Tipo de archivo inválido.' });
   } catch (err) {
     return next(err);
