@@ -14,13 +14,18 @@ import com.example.labo_android_semana_02.data.remote.api.AuthApi
 import com.example.labo_android_semana_02.data.remote.api.CursoApi
 import com.example.labo_android_semana_02.data.remote.api.ForoApi
 import com.example.labo_android_semana_02.data.remote.api.MaterialApi
+import com.example.labo_android_semana_02.data.remote.dto.ActualizarPerfilRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CalificarRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.CambiarPasswordRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CodigoEstadoRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.ConfirmarRecuperacionRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CrearHiloRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.CursoUpsertRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.EliminarCuentaRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.LoginRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.RegisterRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.ResponderHiloRequestDto
+import com.example.labo_android_semana_02.data.remote.dto.SolicitarRecuperacionRequestDto
 import com.example.labo_android_semana_02.data.remote.dto.UnirseCursoRequestDto
 import com.example.labo_android_semana_02.data.remote.safeApiCall
 import com.example.labo_android_semana_02.data.remote.safeVoidCall
@@ -109,6 +114,59 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun refreshMe(): Result<Usuario> {
         return safeApiCall { authApi.me().toDomain() }.onSuccess {
             dataStore.updateUsuario(it)
+        }
+    }
+
+    override suspend fun actualizarPerfil(nombre: String): Result<Usuario> {
+        return safeApiCall {
+            authApi.actualizarPerfil(ActualizarPerfilRequestDto(nombre = nombre.trim())).toDomain()
+        }.onSuccess { actualizado ->
+            dataStore.updateUsuario(actualizado)
+        }
+    }
+
+    override suspend fun cambiarPassword(passwordActual: String, passwordNueva: String): Result<String> {
+        return safeApiCall {
+            authApi.cambiarPassword(
+                CambiarPasswordRequestDto(
+                    passwordActual = passwordActual,
+                    passwordNueva = passwordNueva,
+                )
+            ).mensaje.ifBlank { "Contraseña actualizada correctamente." }
+        }
+    }
+
+    override suspend fun solicitarRecuperacionPassword(email: String): Result<Pair<String, String?>> {
+        return safeApiCall {
+            val resp = authApi.solicitarRecuperacion(
+                SolicitarRecuperacionRequestDto(email = email.trim()),
+            )
+            resp.mensaje.ifBlank { "Código de recuperación generado." } to resp.codigoOtp
+        }
+    }
+
+    override suspend fun confirmarRecuperacionPassword(
+        email: String,
+        codigo: String,
+        passwordNueva: String,
+    ): Result<String> {
+        return safeApiCall {
+            authApi.confirmarRecuperacion(
+                ConfirmarRecuperacionRequestDto(
+                    email = email.trim(),
+                    codigo = codigo.trim(),
+                    passwordNueva = passwordNueva,
+                )
+            ).mensaje.ifBlank { "Contraseña restablecida correctamente." }
+        }
+    }
+
+    override suspend fun eliminarCuenta(password: String): Result<Unit> {
+        return safeVoidCall {
+            authApi.eliminarCuenta(EliminarCuentaRequestDto(password = password))
+        }.onSuccess {
+            dataStore.clearSession()
+            limpiarCachesLocales()
         }
     }
 

@@ -38,9 +38,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import com.example.labo_android_semana_02.ui.components.AppOutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -78,6 +81,13 @@ fun AuthScreen(
     onLimpiarError: () -> Unit,
     onAlternarTema: () -> Unit,
     temaOscuro: Boolean,
+    onAbrirRecuperar: () -> Unit = {},
+    onCerrarRecuperar: () -> Unit = {},
+    onRecuperarEmailChange: (String) -> Unit = {},
+    onRecuperarCodigoChange: (String) -> Unit = {},
+    onRecuperarPasswordChange: (String) -> Unit = {},
+    onSolicitarCodigoRecuperacion: () -> Unit = {},
+    onConfirmarRecuperacion: () -> Unit = {},
 ) {
     var mostrarPassword by remember { mutableStateOf(false) }
 
@@ -165,6 +175,14 @@ fun AuthScreen(
                             BannerMensaje(
                                 texto = state.error,
                                 esError = true,
+                                onDismiss = onLimpiarError,
+                            )
+                        }
+
+                        if (state.mensaje != null) {
+                            BannerMensaje(
+                                texto = state.mensaje,
+                                esError = false,
                                 onDismiss = onLimpiarError,
                             )
                         }
@@ -291,6 +309,21 @@ fun AuthScreen(
                             )
                         }
 
+                        if (!state.esRegistro) {
+                            AppTextButton(
+                                onClick = onAbrirRecuperar,
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Key,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("¿Olvidaste tu contraseña?")
+                            }
+                        }
+
                         if (BuildConfig.DEBUG && !state.esRegistro) {
                             Text(
                                 text = "Autocompletar cuentas demo (servidor local):",
@@ -323,5 +356,79 @@ fun AuthScreen(
                 }
             }
         }
+    }
+
+    if (state.mostrarDialogoRecuperar) {
+        AlertDialog(
+            onDismissRequest = onCerrarRecuperar,
+            title = {
+                TituloConIcono(
+                    texto = "Recuperar contraseña",
+                    icono = Icons.Default.Key,
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = "Ingresa tu correo electrónico para generar un código de verificación de 6 dígitos y restablecer tu contraseña.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = state.recuperarEmail,
+                        onValueChange = onRecuperarEmailChange,
+                        label = { Text("Correo electrónico") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    AppOutlinedButton(
+                        onClick = onSolicitarCodigoRecuperacion,
+                        enabled = !state.cargando,
+                        icon = Icons.Default.Key,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Generar código OTP de 6 dígitos")
+                    }
+                    if (state.codigoOtpGenerado != null) {
+                        BannerMensaje(
+                            texto = "Código generado: ${state.codigoOtpGenerado}",
+                            esError = false,
+                            onDismiss = {},
+                        )
+                    }
+                    OutlinedTextField(
+                        value = state.recuperarCodigo,
+                        onValueChange = onRecuperarCodigoChange,
+                        label = { Text("Código OTP (6 dígitos)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = state.recuperarNuevaPassword,
+                        onValueChange = onRecuperarPasswordChange,
+                        label = { Text("Nueva contraseña (mín. 6 caracteres)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                AppButton(
+                    onClick = onConfirmarRecuperacion,
+                    enabled = !state.cargando,
+                ) {
+                    Text("Restablecer contraseña")
+                }
+            },
+            dismissButton = {
+                AppTextButton(onClick = onCerrarRecuperar) {
+                    Text("Cancelar")
+                }
+            },
+        )
     }
 }

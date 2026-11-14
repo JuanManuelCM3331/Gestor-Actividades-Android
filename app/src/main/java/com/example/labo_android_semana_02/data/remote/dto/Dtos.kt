@@ -32,6 +32,45 @@ data class AuthResponseDto(
 )
 
 @Serializable
+data class ActualizarPerfilRequestDto(
+    val nombre: String,
+)
+
+@Serializable
+data class CambiarPasswordRequestDto(
+    @SerialName("password_actual") val passwordActual: String,
+    @SerialName("password_nueva") val passwordNueva: String,
+)
+
+@Serializable
+data class SolicitarRecuperacionRequestDto(
+    val email: String,
+)
+
+@Serializable
+data class SolicitarRecuperacionResponseDto(
+    val mensaje: String = "",
+    @SerialName("codigo_otp") val codigoOtp: String? = null,
+)
+
+@Serializable
+data class ConfirmarRecuperacionRequestDto(
+    val email: String,
+    val codigo: String,
+    @SerialName("password_nueva") val passwordNueva: String,
+)
+
+@Serializable
+data class EliminarCuentaRequestDto(
+    val password: String,
+)
+
+@Serializable
+data class MensajeResponseDto(
+    val mensaje: String = "",
+)
+
+@Serializable
 data class CursoDto(
     val id: Int,
     @SerialName("instructor_id") val instructorId: Int,

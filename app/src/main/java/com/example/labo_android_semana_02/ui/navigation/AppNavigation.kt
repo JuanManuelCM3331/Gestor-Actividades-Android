@@ -62,6 +62,13 @@ fun AppNavigation(
                 onLimpiarError = authViewModel::limpiarError,
                 onAlternarTema = onAlternarTema,
                 temaOscuro = temaOscuro,
+                onAbrirRecuperar = authViewModel::abrirDialogoRecuperar,
+                onCerrarRecuperar = authViewModel::cerrarDialogoRecuperar,
+                onRecuperarEmailChange = authViewModel::onRecuperarEmailChange,
+                onRecuperarCodigoChange = authViewModel::onRecuperarCodigoChange,
+                onRecuperarPasswordChange = authViewModel::onRecuperarPasswordChange,
+                onSolicitarCodigoRecuperacion = authViewModel::solicitarCodigoRecuperacion,
+                onConfirmarRecuperacion = authViewModel::confirmarRecuperacionPassword,
             )
         }
         is AuthSessionState.Authenticated -> {
@@ -90,6 +97,9 @@ fun AppNavigation(
                         onSalirseCurso = vm::salirseDeCurso,
                         onCerrarSesion = vm::cerrarSesion,
                         onLimpiarFeedback = vm::limpiarFeedback,
+                        onActualizarPerfil = vm::actualizarPerfil,
+                        onCambiarPassword = vm::cambiarPassword,
+                        onEliminarCuenta = vm::eliminarCuenta,
                     )
                 }
 

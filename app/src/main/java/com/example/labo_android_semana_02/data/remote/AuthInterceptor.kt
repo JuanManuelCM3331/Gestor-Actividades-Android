@@ -15,7 +15,11 @@ class AuthInterceptor @Inject constructor(
         val original = chain.request()
         val path = original.url.encodedPath
 
-        if (path.endsWith("/api/auth/login") || path.endsWith("/api/auth/register")) {
+        if (
+            path.endsWith("/api/auth/login") ||
+            path.endsWith("/api/auth/register") ||
+            path.contains("/api/auth/recuperar/")
+        ) {
             return chain.proceed(original)
         }
 

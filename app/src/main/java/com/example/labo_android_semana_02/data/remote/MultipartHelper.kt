@@ -1,6 +1,8 @@
 package com.example.labo_android_semana_02.data.remote
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.example.labo_android_semana_02.domain.model.ArchivoLocal
@@ -95,24 +97,34 @@ class MultipartHelper @Inject constructor(
 
         return runCatching {
             val uri = Uri.parse(archivo.uriString)
-            val localFile = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+            val originalLocalFile = if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
                 File(uri.path!!)
             } else {
                 null
             }
 
-            if (localFile != null && (!localFile.exists() || !localFile.canRead())) {
+            if (originalLocalFile != null && (!originalLocalFile.exists() || !originalLocalFile.canRead())) {
                 throw IllegalStateException("No se pudo abrir '${archivo.nombre}'.")
             }
 
-            val mediaType = archivo.mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()
+            // Compresión automática en segundo plano para imágenes pesadas (> 1 MB) antes de subir
+            val compressedFile = comprimirImagenSiEsNecesario(
+                uri = uri,
+                localFile = originalLocalFile,
+                mimeType = archivo.mimeType,
+                tamanoOriginal = archivo.tamanoBytes,
+            )
+            val localFile = compressedFile ?: originalLocalFile
+            val effectiveLength = compressedFile?.length() ?: archivo.tamanoBytes
+            val mediaType = (if (compressedFile != null) "image/jpeg" else archivo.mimeType)
+                .toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()
 
             // PERF-01: RequestBody por streaming (bloques de 8 KB) sin cargar el archivo completo en RAM
             val streamingBody = object : RequestBody() {
                 override fun contentType() = mediaType
 
                 override fun contentLength(): Long =
-                    archivo.tamanoBytes.takeIf { it in 1..ValidarArchivoUseCase.MAX_FILE_SIZE_BYTES } ?: -1L
+                    effectiveLength.takeIf { it in 1..ValidarArchivoUseCase.MAX_FILE_SIZE_BYTES } ?: -1L
 
                 override fun writeTo(sink: BufferedSink) {
                     val stream = if (localFile != null) {
@@ -142,4 +154,43 @@ class MultipartHelper @Inject constructor(
             MultipartBody.Part.createFormData(fieldName, archivo.nombre, streamingBody)
         }
     }
+
+    /**
+     * Comprime automáticamente fotos o imágenes mayores a 1 MB (escalando a máx. 1920 px y JPEG 82%)
+     * para optimizar el consumo de datos móviles sin requerir librerías externas.
+     */
+    private fun comprimirImagenSiEsNecesario(
+        uri: Uri,
+        localFile: File?,
+        mimeType: String,
+        tamanoOriginal: Long,
+    ): File? = runCatching {
+        val cleanMime = mimeType.lowercase()
+        val esImagenComprimible = cleanMime == "image/jpeg" || cleanMime == "image/jpg" || cleanMime == "image/png"
+        if (!esImagenComprimible || tamanoOriginal <= 1_048_576L) return null
+
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        val openStream = {
+            if (localFile != null) localFile.inputStream() else context.contentResolver.openInputStream(uri)
+        }
+        openStream()?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+        val w = boundsOpts.outWidth
+        val h = boundsOpts.outHeight
+        if (w <= 0 || h <= 0) return null
+
+        var sampleSize = 1
+        while ((w / sampleSize) > 1920 || (h / sampleSize) > 1920) {
+            sampleSize *= 2
+        }
+        val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val bitmap = openStream()?.use { BitmapFactory.decodeStream(it, null, decodeOpts) } ?: return null
+
+        val outDir = File(context.cacheDir, "descargas").apply { mkdirs() }
+        val outFile = File(outDir, "comp_${System.currentTimeMillis()}.jpg")
+        outFile.outputStream().use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
+        }
+        bitmap.recycle()
+        if (outFile.exists() && outFile.length() in 1 until tamanoOriginal) outFile else null
+    }.getOrNull()
 }
